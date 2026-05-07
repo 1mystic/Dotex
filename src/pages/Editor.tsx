@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { type ImperativePanelHandle } from "react-resizable-panels";
 import DocumentHeader from "@/components/editor/DocumentHeader";
 import EditorToolbar from "@/components/editor/EditorToolbar";
 import MarkdownPreview from "@/components/editor/MarkdownPreview";
@@ -9,12 +10,28 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable";
+import {
+  Sheet,
+  SheetContent,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { PanelLeftOpen, PanelLeftClose, FileText } from "lucide-react";
+import { FileText, PanelLeftOpen } from "lucide-react";
 import { useFileSystem } from "@/lib/fileSystem/FileSystemContext";
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 
 type ViewMode = "editor" | "split" | "preview";
+
+// ── Mobile detection ──────────────────────────────────────────────────────────
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < breakpoint);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", handler, { passive: true });
+    return () => window.removeEventListener("resize", handler);
+  }, [breakpoint]);
+  return isMobile;
+}
 
 // ── Preference persistence ────────────────────────────────────────────────────
 
@@ -34,16 +51,17 @@ function savePref(key: string, value: unknown) {
 
 export default function Editor() {
   const { nodes, activeFileId, isReady, openFile, getContent, saveContent } = useFileSystem();
+  const isMobile = useIsMobile();
 
-  // Preferences persisted in localStorage
+  // Preferences
   const [viewMode, setViewMode] = useState<ViewMode>(() => loadPref("tf-viewMode", "split"));
   const [darkMode, setDarkMode] = useState(() => loadPref("tf-darkMode", true));
-  const [syncScrollEnabled, setSyncScrollEnabled] = useState(() =>
-    loadPref("tf-syncScroll", true),
-  );
-  const [sidebarOpen, setSidebarOpen] = useState(() => loadPref("tf-sidebar", true));
+  const [syncScrollEnabled, setSyncScrollEnabled] = useState(() => loadPref("tf-syncScroll", true));
+  const [sidebarOpen, setSidebarOpen] = useState(() => !isMobile && loadPref("tf-sidebar", true));
+  // Mobile-only sheet state
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
 
-  // Per-file editor state
+  // Per-file state
   const [source, setSource] = useState("");
   const [title, setTitle] = useState("Untitled");
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
@@ -58,8 +76,11 @@ export default function Editor() {
   const isHistoryOpRef = useRef(false);
   const pushTimerRef = useRef<number | null>(null);
   const loadedFileIdRef = useRef<string | null>(null);
+  // Imperative handle for the sidebar panel — drives collapse/expand without
+  // unmounting the panel (which would reverse the resize direction).
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
 
-  // ── Dark mode effect ────────────────────────────────────────────────────────
+  // ── Dark mode ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
@@ -70,31 +91,40 @@ export default function Editor() {
   useEffect(() => { savePref("tf-viewMode", viewMode); }, [viewMode]);
   useEffect(() => { savePref("tf-darkMode", darkMode); }, [darkMode]);
   useEffect(() => { savePref("tf-syncScroll", syncScrollEnabled); }, [syncScrollEnabled]);
-  useEffect(() => { savePref("tf-sidebar", sidebarOpen); }, [sidebarOpen]);
+  useEffect(() => { if (!isMobile) savePref("tf-sidebar", sidebarOpen); }, [sidebarOpen, isMobile]);
+
+  // ── Sidebar toggle (imperative API avoids panel re-mount) ───────────────────
+
+  const toggleSidebar = useCallback(() => {
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
+  }, []);
 
   // ── Load active file ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!isReady || !activeFileId) return;
     if (loadedFileIdRef.current === activeFileId) return;
-
     loadedFileIdRef.current = activeFileId;
+
     getContent(activeFileId).then((content) => {
       const node = nodes.find((n) => n.id === activeFileId);
-      const name = node?.name.replace(/\.md$/, "") ?? "Untitled";
-      setTitle(name);
+      setTitle(node?.name.replace(/\.md$/, "") ?? "Untitled");
       setSource(content);
       historyRef.current = [content];
       historyIndexRef.current = 0;
     });
   }, [activeFileId, isReady, getContent, nodes]);
 
-  // ── Auto-save (debounced 800 ms) ────────────────────────────────────────────
+  // ── Auto-save ───────────────────────────────────────────────────────────────
 
   const debouncedSave = useDebouncedCallback(
-    (id: string, content: string) => {
-      saveContent(id, content);
-    },
+    (id: string, content: string) => saveContent(id, content),
     800,
   );
 
@@ -140,7 +170,7 @@ export default function Editor() {
     }
   };
 
-  // ── Cursor tracking ─────────────────────────────────────────────────────────
+  // ── Cursor ──────────────────────────────────────────────────────────────────
 
   const updateCursor = () => {
     const ta = textareaRef.current;
@@ -169,13 +199,12 @@ export default function Editor() {
     const e = textareaRef.current, p = previewScrollRef.current;
     if (e && p) syncScroll(e, p);
   };
-
   const handlePreviewScroll = () => {
     const e = textareaRef.current, p = previewScrollRef.current;
     if (e && p) syncScroll(p, e);
   };
 
-  // ── Formatting helpers ──────────────────────────────────────────────────────
+  // ── Formatting ──────────────────────────────────────────────────────────────
 
   const wrapSelection = (before: string, after = "") => {
     const ta = textareaRef.current;
@@ -216,9 +245,7 @@ export default function Editor() {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
-    if (mod && ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")) {
-      e.preventDefault(); redo(); return;
-    }
+    if (mod && ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")) { e.preventDefault(); redo(); return; }
     if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); return; }
     if (mod && e.key.toLowerCase() === "b") { e.preventDefault(); wrapSelection("**", "**"); return; }
     if (mod && e.key.toLowerCase() === "i") { e.preventDefault(); wrapSelection("_", "_"); return; }
@@ -227,12 +254,8 @@ export default function Editor() {
       e.preventDefault();
       const ta = e.currentTarget;
       const start = ta.selectionStart;
-      const newVal = ta.value.slice(0, start) + "  " + ta.value.slice(ta.selectionEnd);
-      handleSourceChange(newVal);
-      requestAnimationFrame(() => {
-        ta.selectionStart = ta.selectionEnd = start + 2;
-        updateCursor();
-      });
+      handleSourceChange(ta.value.slice(0, start) + "  " + ta.value.slice(ta.selectionEnd));
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 2; updateCursor(); });
     }
   };
 
@@ -249,27 +272,29 @@ export default function Editor() {
   if (!activeFileId) {
     return (
       <div className="flex h-screen bg-background">
-        {sidebarOpen && (
-          <div className="w-56 shrink-0">
+        {!isMobile && (
+          <div className="w-52 shrink-0">
             <FileSidebar
               pendingNewParentId={pendingNewParentId}
               setPendingNewParentId={setPendingNewParentId}
-              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+              onToggleSidebar={toggleSidebar}
             />
           </div>
         )}
         <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
           <FileText className="h-12 w-12 opacity-30" />
           <p className="text-sm">Select a file from the sidebar or create a new one.</p>
-          <Button variant="outline" size="sm" onClick={() => setSidebarOpen(true)}>
-            <PanelLeftOpen className="h-4 w-4 mr-2" /> Open Sidebar
-          </Button>
+          {isMobile && (
+            <Button variant="outline" size="sm" onClick={() => setMobileSheetOpen(true)}>
+              <PanelLeftOpen className="h-4 w-4 mr-2" /> Open Files
+            </Button>
+          )}
         </div>
       </div>
     );
   }
 
-  // ── Main layout ─────────────────────────────────────────────────────────────
+  // ── Shared editor / preview areas ───────────────────────────────────────────
 
   const editorArea = (
     <div className="flex flex-col min-h-0 w-full h-full border-r border-border">
@@ -306,6 +331,51 @@ export default function Editor() {
     </div>
   );
 
+  // ── Split panel (direction aware) ───────────────────────────────────────────
+  // On mobile the split is vertical so editor stacks above preview.
+
+  const splitDirection = isMobile ? "vertical" : "horizontal";
+
+  const splitContent =
+    viewMode === "split" ? (
+      // Key forces a clean remount when direction changes (mobile ↔ desktop).
+      <ResizablePanelGroup key={splitDirection} direction={splitDirection} className="h-full">
+        <ResizablePanel defaultSize={50} minSize={20}>
+          {editorArea}
+        </ResizablePanel>
+        <ResizableHandle
+          withHandle={!isMobile}
+          className="bg-border hover:bg-primary/40 transition-colors"
+        />
+        <ResizablePanel defaultSize={50} minSize={20}>
+          {previewArea}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    ) : viewMode === "editor" ? (
+      editorArea
+    ) : (
+      previewArea
+    );
+
+  // ── Mobile sidebar sheet ────────────────────────────────────────────────────
+
+  const mobileSidebar = (
+    <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+      <SheetContent side="left" className="p-0 w-72">
+        <FileSidebar
+          pendingNewParentId={pendingNewParentId}
+          setPendingNewParentId={(id) => {
+            setPendingNewParentId(id);
+            setMobileSheetOpen(false);
+          }}
+          onToggleSidebar={() => setMobileSheetOpen(false)}
+        />
+      </SheetContent>
+    </Sheet>
+  );
+
+  // ── Main layout ─────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <DocumentHeader
@@ -316,8 +386,8 @@ export default function Editor() {
         onViewMode={setViewMode}
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((v) => !v)}
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        sidebarOpen={isMobile ? mobileSheetOpen : sidebarOpen}
+        onToggleSidebar={isMobile ? () => setMobileSheetOpen((v) => !v) : toggleSidebar}
       />
       <EditorToolbar
         onInsert={handleInsert}
@@ -326,40 +396,58 @@ export default function Editor() {
         onToggleSyncScroll={() => setSyncScrollEnabled((v) => !v)}
       />
 
-      <div className="flex-1 min-h-0 overflow-hidden flex">
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
-          {/* Sidebar panel */}
-          {sidebarOpen && (
-            <>
-              <ResizablePanel defaultSize={18} minSize={12} maxSize={35} className="min-w-[160px]">
+      <div className="flex-1 min-h-0 overflow-hidden flex relative">
+        {isMobile ? (
+          // ── Mobile layout: full-width content, sidebar via Sheet ────────────
+          <>
+            {mobileSidebar}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              {splitContent}
+            </div>
+          </>
+        ) : (
+          // ── Desktop layout: collapsible sidebar panel + content ──────────────
+          <>
+            <ResizablePanelGroup direction="horizontal" className="flex-1">
+              {/* Sidebar — always mounted; collapse/expand via imperative API */}
+              <ResizablePanel
+                ref={sidebarPanelRef}
+                collapsible
+                collapsedSize={0}
+                defaultSize={15}
+                minSize={12}
+                maxSize={30}
+                onCollapse={() => setSidebarOpen(false)}
+                onExpand={() => setSidebarOpen(true)}
+              >
                 <FileSidebar
                   pendingNewParentId={pendingNewParentId}
                   setPendingNewParentId={setPendingNewParentId}
+                  onToggleSidebar={toggleSidebar}
                 />
               </ResizablePanel>
-              <ResizableHandle className="bg-border hover:bg-primary/30 transition-colors" />
-            </>
-          )}
 
-          {/* Editor / preview panel */}
-          <ResizablePanel defaultSize={sidebarOpen ? 82 : 100}>
-            {viewMode === "split" ? (
-              <ResizablePanelGroup direction="horizontal" className="h-full">
-                <ResizablePanel defaultSize={50} minSize={20}>
-                  {editorArea}
-                </ResizablePanel>
-                <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors" />
-                <ResizablePanel defaultSize={50} minSize={20}>
-                  {previewArea}
-                </ResizablePanel>
-              </ResizablePanelGroup>
-            ) : viewMode === "editor" ? (
-              editorArea
-            ) : (
-              previewArea
+              <ResizableHandle className="bg-border hover:bg-primary/30 transition-colors" />
+
+              {/* Editor / preview content */}
+              <ResizablePanel defaultSize={85}>
+                {splitContent}
+              </ResizablePanel>
+            </ResizablePanelGroup>
+
+            {/* Floating toggle — visible only when sidebar is collapsed.
+                Stays at the left edge of the content area; never moves to header. */}
+            {!sidebarOpen && (
+              <button
+                onClick={toggleSidebar}
+                title="Open sidebar"
+                className="absolute left-1.5 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card/90 shadow-md backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              >
+                <PanelLeftOpen className="h-3.5 w-3.5" />
+              </button>
             )}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </>
+        )}
       </div>
 
       <StatusBar source={source} cursorLine={cursor.line} cursorCol={cursor.col} />

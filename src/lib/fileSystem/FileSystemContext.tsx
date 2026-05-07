@@ -46,7 +46,7 @@ import {
 
 // ── Welcome content for first-time users ─────────────────────────────────────
 
-const WELCOME_CONTENT = `# Welcome to Matex ✦
+const WELCOME_CONTENT = `# Welcome to Dotex ✦
 
 A powerful **Markdown + LaTeX** editor with live preview and export.
 
@@ -71,7 +71,7 @@ Write *italic*, **bold**, ~~strikethrough~~, and \`inline code\`.
 
 \`\`\`javascript
 const greet = (name) => \`Hello, \${name}!\`;
-console.log(greet("Matex"));
+console.log(greet("Dotex"));
 \`\`\`
 
 ---

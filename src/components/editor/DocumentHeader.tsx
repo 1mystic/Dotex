@@ -42,13 +42,18 @@ export default function DocumentHeader({
   return (
     <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-card border-b border-border gap-3">
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        {!sidebarOpen && (
-          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onToggleSidebar} title="Open sidebar">
-            <PanelLeftOpen className="h-4 w-4" />
-          </Button>
-        )}
-        <img src="/favicon.svg" alt="Matex" className="h-7 w-7 shrink-0" />
-        <span className="font-semibold hidden sm:inline">Matex</span>
+        {/* Mobile-only: header toggle (desktop uses the floating left-edge button) */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 md:hidden"
+          onClick={onToggleSidebar}
+          title="Toggle sidebar"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </Button>
+        <img src="/favicon.svg" alt="Dotex" className="h-7 w-7 shrink-0" />
+        <span className="font-semibold hidden sm:inline">Dotex</span>
         <Badge variant="secondary" className="hidden sm:inline-flex text-[10px]">2026</Badge>
         <Separator orientation="vertical" className="h-5" />
         {editing ? (

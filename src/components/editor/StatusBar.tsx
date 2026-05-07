@@ -25,7 +25,7 @@ export default function StatusBar({ source, cursorLine, cursorCol }: Props) {
       <div className="flex items-center gap-3">
         {displayCount > 0 && <span className="text-primary">∫ {displayCount} display</span>}
         {inlineCount > 0 && <span className="text-primary">$ {inlineCount} inline</span>}
-        <span>Matex · MD + LaTeX + HTML</span>
+        <span>Dotex · MD + LaTeX + HTML</span>
       </div>
     </div>
   );
