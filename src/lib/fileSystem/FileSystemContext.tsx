@@ -356,10 +356,20 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     backendRef.current = "gdrive";
     localStorage.setItem(PREF_BACKEND, "gdrive");
 
-    const list = await gdriveListAll();
-    setNodes(list);
-    const first = list.find((n) => n.type === "file") ?? null;
-    setActiveFileId(first?.id ?? null);
+    let list = await gdriveListAll();
+
+    // Auto-seed a Getting Started file so the editor is never left blank
+    if (list.length === 0) {
+      const welcome = await gdriveCreateFile(null, "Getting Started.md");
+      await gdriveSaveContent(welcome.id, WELCOME_CONTENT);
+      list = [{ ...welcome, updatedAt: Date.now() }];
+      setNodes(list);
+      setActiveFileId(welcome.id);
+    } else {
+      setNodes(list);
+      const first = list.find((n) => n.type === "file") ?? null;
+      setActiveFileId(first?.id ?? null);
+    }
   }, []);
 
   const signOutGoogle = useCallback(() => {

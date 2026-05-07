@@ -14,8 +14,7 @@ import {
   Sheet,
   SheetContent,
 } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
-import { FileText, PanelLeftOpen } from "lucide-react";
+import { PanelLeftOpen } from "lucide-react";
 import { useFileSystem } from "@/lib/fileSystem/FileSystemContext";
 import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 
@@ -265,31 +264,6 @@ export default function Editor() {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="text-muted-foreground text-sm animate-pulse">Loading…</div>
-      </div>
-    );
-  }
-
-  if (!activeFileId) {
-    return (
-      <div className="flex h-screen bg-background">
-        {!isMobile && (
-          <div className="w-52 shrink-0">
-            <FileSidebar
-              pendingNewParentId={pendingNewParentId}
-              setPendingNewParentId={setPendingNewParentId}
-              onToggleSidebar={toggleSidebar}
-            />
-          </div>
-        )}
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
-          <FileText className="h-12 w-12 opacity-30" />
-          <p className="text-sm">Select a file from the sidebar or create a new one.</p>
-          {isMobile && (
-            <Button variant="outline" size="sm" onClick={() => setMobileSheetOpen(true)}>
-              <PanelLeftOpen className="h-4 w-4 mr-2" /> Open Files
-            </Button>
-          )}
-        </div>
       </div>
     );
   }
