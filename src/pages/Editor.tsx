@@ -3,128 +3,102 @@ import DocumentHeader from "@/components/editor/DocumentHeader";
 import EditorToolbar from "@/components/editor/EditorToolbar";
 import MarkdownPreview from "@/components/editor/MarkdownPreview";
 import StatusBar from "@/components/editor/StatusBar";
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import FileSidebar from "@/components/sidebar/FileSidebar";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import { Button } from "@/components/ui/button";
+import { PanelLeftOpen, PanelLeftClose, FileText } from "lucide-react";
+import { useFileSystem } from "@/lib/fileSystem/FileSystemContext";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 
 type ViewMode = "editor" | "split" | "preview";
 
-const DEFAULT_CONTENT = `# Welcome to Matex ✦
+// ── Preference persistence ────────────────────────────────────────────────────
 
-A powerful **Markdown + LaTeX** editor with live preview and export.
+function loadPref<T>(key: string, fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return v !== null ? (JSON.parse(v) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+function savePref(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+}
 
----
-
-## Markdown Features
-
-Write *italic*, **bold**, ~~strikethrough~~, and \`inline code\`.
-
-> Blockquotes look great for callouts and important notes.
-
-### Lists
-
-- Item one
-- Item two
-  - Nested item
-  - Another nested
-
-1. First step
-2. Second step
-3. Third step
-
-### Code Blocks
-
-\`\`\`javascript
-const greet = (name) => {
-  return \`Hello, \${name}!\`;
-};
-console.log(greet("Matex"));
-\`\`\`
-
-### Tables
-
-| Feature   | Supported | Notes              |
-|-----------|-----------|--------------------|
-| Markdown  | ✓         | GFM flavor         |
-| LaTeX     | ✓         | KaTeX rendering    |
-| HTML      | ✓         | Sanitized          |
-
----
-
-## LaTeX Math
-
-Inline math like $E = mc^2$ flows naturally with text. The Pythagorean
-theorem states that $a^2 + b^2 = c^2$.
-
-Display equations:
-
-$$\\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}$$
-
-### Aligned Equations
-
-$$
-\\begin{align}
-(a + b)^2 &= a^2 + 2ab + b^2 \\\\
-(a - b)^2 &= a^2 - 2ab + b^2
-\\end{align}
-$$
-
-### Matrices
-
-$$
-\\begin{pmatrix}
-1 & 2 & 3 \\\\
-4 & 5 & 6 \\\\
-7 & 8 & 9
-\\end{pmatrix}
-$$
-
-### Cases
-
-$$
-f(x) = \\begin{cases}
-x^2 & \\text{if } x \\geq 0 \\\\
--x  & \\text{if } x < 0
-\\end{cases}
-$$
-
-### Maxwell's Equations
-
-$$
-\\begin{align}
-\\nabla \\cdot \\mathbf{E} &= \\frac{\\rho}{\\varepsilon_0} \\\\
-\\nabla \\cdot \\mathbf{B} &= 0 \\\\
-\\nabla \\times \\mathbf{E} &= -\\frac{\\partial \\mathbf{B}}{\\partial t} \\\\
-\\nabla \\times \\mathbf{B} &= \\mu_0 \\mathbf{J} + \\mu_0 \\varepsilon_0 \\frac{\\partial \\mathbf{E}}{\\partial t}
-\\end{align}
-$$
-
-## HTML Blocks
-
-<div style="padding:1rem;background:#f5f3ff;border-radius:8px;border:1px solid #ddd6fe;">
-  <strong>Tip:</strong> You can embed sanitized HTML directly in your document.
-</div>
-
-Happy writing!
-`;
+// ── Editor ────────────────────────────────────────────────────────────────────
 
 export default function Editor() {
-  const [source, setSource] = useState(DEFAULT_CONTENT);
-  const [title, setTitle] = useState("Untitled Document");
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
-  const [darkMode, setDarkMode] = useState(true);
-  const [syncScrollEnabled, setSyncScrollEnabled] = useState(true);
+  const { nodes, activeFileId, isReady, openFile, getContent, saveContent } = useFileSystem();
+
+  // Preferences persisted in localStorage
+  const [viewMode, setViewMode] = useState<ViewMode>(() => loadPref("tf-viewMode", "split"));
+  const [darkMode, setDarkMode] = useState(() => loadPref("tf-darkMode", true));
+  const [syncScrollEnabled, setSyncScrollEnabled] = useState(() =>
+    loadPref("tf-syncScroll", true),
+  );
+  const [sidebarOpen, setSidebarOpen] = useState(() => loadPref("tf-sidebar", true));
+
+  // Per-file editor state
+  const [source, setSource] = useState("");
+  const [title, setTitle] = useState("Untitled");
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
+  const [pendingNewParentId, setPendingNewParentId] = useState<string | null>(null);
+
+  // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const ignoreScrollRef = useRef(false);
-
-  const historyRef = useRef<string[]>([DEFAULT_CONTENT]);
+  const historyRef = useRef<string[]>([""]);
   const historyIndexRef = useRef(0);
   const isHistoryOpRef = useRef(false);
   const pushTimerRef = useRef<number | null>(null);
+  const loadedFileIdRef = useRef<string | null>(null);
+
+  // ── Dark mode effect ────────────────────────────────────────────────────────
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
+
+  // ── Persist preferences ─────────────────────────────────────────────────────
+
+  useEffect(() => { savePref("tf-viewMode", viewMode); }, [viewMode]);
+  useEffect(() => { savePref("tf-darkMode", darkMode); }, [darkMode]);
+  useEffect(() => { savePref("tf-syncScroll", syncScrollEnabled); }, [syncScrollEnabled]);
+  useEffect(() => { savePref("tf-sidebar", sidebarOpen); }, [sidebarOpen]);
+
+  // ── Load active file ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!isReady || !activeFileId) return;
+    if (loadedFileIdRef.current === activeFileId) return;
+
+    loadedFileIdRef.current = activeFileId;
+    getContent(activeFileId).then((content) => {
+      const node = nodes.find((n) => n.id === activeFileId);
+      const name = node?.name.replace(/\.md$/, "") ?? "Untitled";
+      setTitle(name);
+      setSource(content);
+      historyRef.current = [content];
+      historyIndexRef.current = 0;
+    });
+  }, [activeFileId, isReady, getContent, nodes]);
+
+  // ── Auto-save (debounced 800 ms) ────────────────────────────────────────────
+
+  const debouncedSave = useDebouncedCallback(
+    (id: string, content: string) => {
+      saveContent(id, content);
+    },
+    800,
+  );
+
+  // ── History ─────────────────────────────────────────────────────────────────
 
   const pushHistory = (val: string) => {
     if (isHistoryOpRef.current) return;
@@ -141,81 +115,88 @@ export default function Editor() {
   const handleSourceChange = (val: string) => {
     setSource(val);
     pushHistory(val);
+    if (activeFileId) debouncedSave(activeFileId, val);
   };
 
   const undo = () => {
     if (historyIndexRef.current > 0) {
       historyIndexRef.current--;
       isHistoryOpRef.current = true;
-      setSource(historyRef.current[historyIndexRef.current]);
+      const val = historyRef.current[historyIndexRef.current];
+      setSource(val);
+      if (activeFileId) debouncedSave(activeFileId, val);
       requestAnimationFrame(() => { isHistoryOpRef.current = false; });
     }
   };
+
   const redo = () => {
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyIndexRef.current++;
       isHistoryOpRef.current = true;
-      setSource(historyRef.current[historyIndexRef.current]);
+      const val = historyRef.current[historyIndexRef.current];
+      setSource(val);
+      if (activeFileId) debouncedSave(activeFileId, val);
       requestAnimationFrame(() => { isHistoryOpRef.current = false; });
     }
   };
 
+  // ── Cursor tracking ─────────────────────────────────────────────────────────
+
   const updateCursor = () => {
     const ta = textareaRef.current;
     if (!ta) return;
-    const pos = ta.selectionStart;
-    const before = ta.value.slice(0, pos);
+    const before = ta.value.slice(0, ta.selectionStart);
     const lines = before.split("\n");
     setCursor({ line: lines.length, col: lines[lines.length - 1].length + 1 });
   };
 
-  const syncScroll = (sourceEl: HTMLTextAreaElement | HTMLDivElement, targetEl: HTMLDivElement | HTMLTextAreaElement) => {
+  // ── Scroll sync ─────────────────────────────────────────────────────────────
+
+  const syncScroll = (
+    src: HTMLTextAreaElement | HTMLDivElement,
+    tgt: HTMLDivElement | HTMLTextAreaElement,
+  ) => {
     if (!syncScrollEnabled || ignoreScrollRef.current) return;
-
-    const sourceMax = sourceEl.scrollHeight - sourceEl.clientHeight;
-    const targetMax = targetEl.scrollHeight - targetEl.clientHeight;
-    if (sourceMax <= 0 || targetMax <= 0) return;
-
-    const ratio = sourceEl.scrollTop / sourceMax;
+    const srcMax = src.scrollHeight - src.clientHeight;
+    const tgtMax = tgt.scrollHeight - tgt.clientHeight;
+    if (srcMax <= 0 || tgtMax <= 0) return;
     ignoreScrollRef.current = true;
-    targetEl.scrollTop = ratio * targetMax;
-    requestAnimationFrame(() => {
-      ignoreScrollRef.current = false;
-    });
+    tgt.scrollTop = (src.scrollTop / srcMax) * tgtMax;
+    requestAnimationFrame(() => { ignoreScrollRef.current = false; });
   };
 
   const handleEditorScroll = () => {
-    const editor = textareaRef.current;
-    const preview = previewScrollRef.current;
-    if (!editor || !preview) return;
-    syncScroll(editor, preview);
+    const e = textareaRef.current, p = previewScrollRef.current;
+    if (e && p) syncScroll(e, p);
   };
 
   const handlePreviewScroll = () => {
-    const editor = textareaRef.current;
-    const preview = previewScrollRef.current;
-    if (!editor || !preview) return;
-    syncScroll(preview, editor);
+    const e = textareaRef.current, p = previewScrollRef.current;
+    if (e && p) syncScroll(p, e);
   };
 
-  const wrapSelection = (before: string, after: string = "") => {
+  // ── Formatting helpers ──────────────────────────────────────────────────────
+
+  const wrapSelection = (before: string, after = "") => {
     const ta = textareaRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
-    const selected = ta.value.slice(start, end);
-    const newVal = ta.value.slice(0, start) + before + selected + after + ta.value.slice(end);
+    const sel = ta.value.slice(start, end);
+    const newVal = ta.value.slice(0, start) + before + sel + after + ta.value.slice(end);
     handleSourceChange(newVal);
     requestAnimationFrame(() => {
       ta.focus();
-      const cursorPos = selected ? start + before.length + selected.length + after.length : start + before.length;
-      ta.selectionStart = ta.selectionEnd = cursorPos;
+      ta.selectionStart = ta.selectionEnd = sel
+        ? start + before.length + sel.length + after.length
+        : start + before.length;
       updateCursor();
     });
   };
 
-  const handleInsert = useCallback((before: string, after: string = "") => {
+  const handleInsert = useCallback((before: string, after = "") => {
     wrapSelection(before, after);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSnippet = useCallback((snippet: string) => {
@@ -229,12 +210,15 @@ export default function Editor() {
       ta.selectionStart = ta.selectionEnd = start + snippet.length;
       updateCursor();
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
-    if (mod && ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")) { e.preventDefault(); redo(); return; }
+    if (mod && ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")) {
+      e.preventDefault(); redo(); return;
+    }
     if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); return; }
     if (mod && e.key.toLowerCase() === "b") { e.preventDefault(); wrapSelection("**", "**"); return; }
     if (mod && e.key.toLowerCase() === "i") { e.preventDefault(); wrapSelection("_", "_"); return; }
@@ -252,6 +236,76 @@ export default function Editor() {
     }
   };
 
+  // ── Loading / empty states ──────────────────────────────────────────────────
+
+  if (!isReady) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground text-sm animate-pulse">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!activeFileId) {
+    return (
+      <div className="flex h-screen bg-background">
+        {sidebarOpen && (
+          <div className="w-56 shrink-0">
+            <FileSidebar
+              pendingNewParentId={pendingNewParentId}
+              setPendingNewParentId={setPendingNewParentId}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            />
+          </div>
+        )}
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+          <FileText className="h-12 w-12 opacity-30" />
+          <p className="text-sm">Select a file from the sidebar or create a new one.</p>
+          <Button variant="outline" size="sm" onClick={() => setSidebarOpen(true)}>
+            <PanelLeftOpen className="h-4 w-4 mr-2" /> Open Sidebar
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main layout ─────────────────────────────────────────────────────────────
+
+  const editorArea = (
+    <div className="flex flex-col min-h-0 w-full h-full border-r border-border">
+      <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
+        Source
+      </div>
+      <textarea
+        ref={textareaRef}
+        className="editor-textarea flex-1"
+        value={source}
+        onChange={(e) => handleSourceChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onSelect={updateCursor}
+        onClick={updateCursor}
+        onKeyUp={updateCursor}
+        onScroll={viewMode === "split" ? handleEditorScroll : undefined}
+        spellCheck={false}
+      />
+    </div>
+  );
+
+  const previewArea = (
+    <div className="flex flex-col min-h-0 h-full">
+      <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
+        Preview
+      </div>
+      <div className="flex-1 min-h-0">
+        <MarkdownPreview
+          ref={previewScrollRef}
+          source={source}
+          onScroll={viewMode === "split" ? handlePreviewScroll : undefined}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <DocumentHeader
@@ -262,6 +316,8 @@ export default function Editor() {
         onViewMode={setViewMode}
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((v) => !v)}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
       />
       <EditorToolbar
         onInsert={handleInsert}
@@ -271,66 +327,39 @@ export default function Editor() {
       />
 
       <div className="flex-1 min-h-0 overflow-hidden flex">
-        {viewMode === "split" ? (
-          <ResizablePanelGroup direction="horizontal" className="flex-1">
-            <ResizablePanel defaultSize={50} minSize={20}>
-              <div className="flex flex-col min-h-0 h-full border-r border-border">
-                <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
-                  Source
-                </div>
-                <textarea
-                  ref={textareaRef}
-                  className="editor-textarea flex-1"
-                  value={source}
-                  onChange={(e) => handleSourceChange(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onSelect={updateCursor}
-                  onClick={updateCursor}
-                  onKeyUp={updateCursor}
-                  onScroll={handleEditorScroll}
-                  spellCheck={false}
+        <ResizablePanelGroup direction="horizontal" className="flex-1">
+          {/* Sidebar panel */}
+          {sidebarOpen && (
+            <>
+              <ResizablePanel defaultSize={18} minSize={12} maxSize={35} className="min-w-[160px]">
+                <FileSidebar
+                  pendingNewParentId={pendingNewParentId}
+                  setPendingNewParentId={setPendingNewParentId}
                 />
-              </div>
-            </ResizablePanel>
-            <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors" />
-            <ResizablePanel defaultSize={50} minSize={20}>
-              <div className="flex flex-col min-h-0 h-full">
-                <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
-                  Preview
-                </div>
-                <div className="flex-1 min-h-0">
-                  <MarkdownPreview ref={previewScrollRef} source={source} onScroll={handlePreviewScroll} />
-                </div>
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        ) : viewMode === "editor" ? (
-          <div className="flex flex-col min-h-0 w-full">
-            <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
-              Source
-            </div>
-            <textarea
-              ref={textareaRef}
-              className="editor-textarea flex-1"
-              value={source}
-              onChange={(e) => handleSourceChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onSelect={updateCursor}
-              onClick={updateCursor}
-              onKeyUp={updateCursor}
-              spellCheck={false}
-            />
-          </div>
-        ) : (
-          <div className="flex flex-col min-h-0 w-full">
-            <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
-              Preview
-            </div>
-            <div className="flex-1 min-h-0">
-              <MarkdownPreview ref={previewScrollRef} source={source} />
-            </div>
-          </div>
-        )}
+              </ResizablePanel>
+              <ResizableHandle className="bg-border hover:bg-primary/30 transition-colors" />
+            </>
+          )}
+
+          {/* Editor / preview panel */}
+          <ResizablePanel defaultSize={sidebarOpen ? 82 : 100}>
+            {viewMode === "split" ? (
+              <ResizablePanelGroup direction="horizontal" className="h-full">
+                <ResizablePanel defaultSize={50} minSize={20}>
+                  {editorArea}
+                </ResizablePanel>
+                <ResizableHandle withHandle className="bg-border hover:bg-primary/40 transition-colors" />
+                <ResizablePanel defaultSize={50} minSize={20}>
+                  {previewArea}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            ) : viewMode === "editor" ? (
+              editorArea
+            ) : (
+              previewArea
+            )}
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
 
       <StatusBar source={source} cursorLine={cursor.line} cursorCol={cursor.col} />

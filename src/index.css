@@ -228,4 +228,11 @@
     max-width: 100%;
     border-radius: 0.5rem;
   }
+
+  /* Dark mode code blocks inside preview */
+  .dark .preview-content pre {
+    background: hsl(220 18% 14%);
+    color: hsl(210 20% 88%);
+    border-color: hsl(220 15% 25%);
+  }
 }

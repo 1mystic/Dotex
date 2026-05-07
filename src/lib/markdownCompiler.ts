@@ -59,7 +59,23 @@ function processLatex(text: string, mathStore: string[]): string {
   return text;
 }
 
+// LRU compile cache — avoids recompiling unchanged source (e.g. during layout shifts)
+const CACHE_MAX = 8;
+const _compileCache = new Map<string, string>();
+
 export function compile(source: string): string {
+  if (_compileCache.has(source)) return _compileCache.get(source)!;
+
+  const result = _compile(source);
+
+  if (_compileCache.size >= CACHE_MAX) {
+    _compileCache.delete(_compileCache.keys().next().value!);
+  }
+  _compileCache.set(source, result);
+  return result;
+}
+
+function _compile(source: string): string {
   // Protect code blocks
   const codePlaceholders: string[] = [];
   let src = source.replace(/```[\s\S]*?```/g, (m) => {
