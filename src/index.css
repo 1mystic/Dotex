@@ -1,0 +1,231 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 15% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 8%;
+    --primary: 252 87% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 93%;
+    --secondary-foreground: 220 15% 8%;
+    --muted: 220 14% 93%;
+    --muted-foreground: 220 10% 50%;
+    --accent: 252 87% 96%;
+    --accent-foreground: 252 87% 30%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 252 87% 62%;
+    --radius: 0.75rem;
+
+    --editor-bg: 220 18% 11%;
+    --editor-fg: 210 20% 88%;
+    --editor-line: 220 15% 18%;
+    --editor-cursor: 252 87% 72%;
+    --editor-selection: 252 87% 30%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 220 18% 9%;
+    --foreground: 210 20% 92%;
+    --card: 220 18% 12%;
+    --card-foreground: 210 20% 92%;
+    --popover: 220 18% 12%;
+    --popover-foreground: 210 20% 92%;
+    --primary: 252 87% 68%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 210 20% 92%;
+    --muted: 220 15% 18%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 252 87% 20%;
+    --accent-foreground: 252 87% 90%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 252 87% 68%;
+  }
+
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-inter;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Minimalist scrollbars with violet accent thumb */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.55) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--primary) / 0.45);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--primary) / 0.75);
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .editor-textarea {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    background: hsl(var(--editor-bg));
+    color: hsl(var(--editor-fg));
+    caret-color: hsl(var(--editor-cursor));
+    padding: 2rem;
+    tab-size: 2;
+    resize: none;
+    outline: none;
+    border: none;
+    width: 100%;
+    height: 100%;
+  }
+  .editor-textarea::selection {
+    background: hsl(var(--editor-selection));
+  }
+
+  .preview-content {
+    font-family: 'Inter', sans-serif;
+    line-height: 1.8;
+    color: hsl(var(--foreground));
+  }
+  .preview-content h1 {
+    font-size: 2.25rem;
+    font-weight: 800;
+    margin: 1.5rem 0 1rem;
+    border-bottom: 2px solid hsl(var(--border));
+    padding-bottom: 0.5rem;
+  }
+  .preview-content h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 1.4rem 0 0.9rem;
+  }
+  .preview-content h3 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 1.2rem 0 0.7rem;
+  }
+  .preview-content p {
+    margin-bottom: 1.1rem;
+  }
+  .preview-content ul, .preview-content ol {
+    margin: 0 0 1.1rem 1.5rem;
+  }
+  .preview-content ul { list-style: disc; }
+  .preview-content ol { list-style: decimal; }
+  .preview-content li { margin-bottom: 0.4rem; }
+  .preview-content a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+  }
+  .preview-content code {
+    background: hsl(var(--secondary));
+    color: hsl(var(--accent-foreground));
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+  }
+  .preview-content pre {
+    background: #ffffff;
+    color: #1e293b;
+    border: 1.5px solid #94a3b8;
+    border-left: 4px solid hsl(var(--primary));
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.855rem;
+  }
+  .preview-content pre code {
+    background: transparent;
+    color: inherit;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+  }
+  .preview-content blockquote {
+    border-left: 4px solid hsl(var(--primary));
+    background: hsl(var(--accent));
+    padding: 0.75rem 1rem;
+    margin: 1rem 0;
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+    border-radius: 0 6px 6px 0;
+  }
+  .preview-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+  }
+  .preview-content th, .preview-content td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+  .preview-content th {
+    background: hsl(var(--secondary));
+    font-weight: 600;
+  }
+  .preview-content tr:nth-child(even) td {
+    background: hsl(var(--secondary) / 0.4);
+  }
+  .preview-content hr {
+    border: none;
+    border-top: 1px solid hsl(var(--border));
+    margin: 1.5rem 0;
+  }
+  .preview-content .katex-display {
+    background: hsl(var(--accent));
+    border-radius: 0.75rem;
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+  .preview-content img {
+    max-width: 100%;
+    border-radius: 0.5rem;
+  }
+}
