@@ -96,6 +96,23 @@ $$
 \\end{align}
 $$
 
+---
+
+## Mermaid Diagrams
+
+Describe diagrams in plain text and Dotex renders them live : in the preview and in your PDF / HTML exports.
+
+\`\`\`mermaid
+flowchart LR
+  A[Write Markdown] --> B[Live Preview]
+  B --> C{Export}
+  C --> D[PDF]
+  C --> E[HTML]
+  C --> F[Markdown]
+\`\`\`
+
+Sequence, class, state, ER, gantt and pie charts are all supported too.
+
 Happy writing!
 `;
 
@@ -125,6 +142,8 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
   // Avoid stale-closure issues in callbacks
   const backendRef = useRef<BackendType>("idb");
   backendRef.current = backend;
+  const nodesRef = useRef<FileNode[]>(nodes);
+  nodesRef.current = nodes;
 
   // ── Initialisation ──────────────────────────────────────────────────────────
 
@@ -267,8 +286,23 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
       if (b === "native") await nativeDeleteEntry(id);
       else if (b === "gdrive") await gdriveDeleteEntry(id);
       else await idbDeleteNode(id);
-      setNodes((prev) => prev.filter((n) => n.id !== id));
-      setActiveFileId((prev) => (prev === id ? null : prev));
+      // Remove the node AND its entire subtree from state — deleting a folder
+      // cascades in storage, so the UI must drop the descendants too (otherwise
+      // they linger as orphans until a manual refresh).
+      const removed = new Set<string>([id]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const n of nodesRef.current) {
+          if (n.parentId && removed.has(n.parentId) && !removed.has(n.id)) {
+            removed.add(n.id);
+            changed = true;
+          }
+        }
+      }
+      setNodes((prev) => prev.filter((n) => !removed.has(n.id)));
+      // Clear the active file if it (or its containing folder) was deleted.
+      setActiveFileId((prev) => (prev && removed.has(prev) ? null : prev));
     },
     [],
   );

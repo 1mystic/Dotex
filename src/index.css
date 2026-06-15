@@ -173,10 +173,11 @@
     padding: 0.15em 0.4em;
     border-radius: 4px;
   }
+  /* Light theme code blocks (default): white background, dark text */
   .preview-content pre {
-    background: #1a1d27;
-    color: #abb2bf;
-    border: 1.5px solid #2d3147;
+    background: #f6f8fa;
+    color: #24292e;
+    border: 1px solid #d0d7de;
     border-left: 4px solid hsl(var(--primary));
     border-radius: 6px;
     padding: 1rem;
@@ -192,25 +193,52 @@
     padding: 0;
     font-size: inherit;
   }
-  /* Syntax highlight token colours (One Dark palette) */
+  /* Dark light-theme palette — deep tones, legible on monochrome printers */
   .preview-content pre .hljs-keyword,
   .preview-content pre .hljs-selector-tag,
-  .preview-content pre .hljs-built_in { color: #c678dd; }
+  .preview-content pre .hljs-built_in { color: #8b1a1a; }
   .preview-content pre .hljs-string,
-  .preview-content pre .hljs-attr { color: #98c379; }
+  .preview-content pre .hljs-attr { color: #032f62; }
   .preview-content pre .hljs-number,
-  .preview-content pre .hljs-literal { color: #d19a66; }
-  .preview-content pre .hljs-comment { color: #5c6370; font-style: italic; }
+  .preview-content pre .hljs-literal { color: #003d99; }
+  .preview-content pre .hljs-comment { color: #4a5056; font-style: italic; }
   .preview-content pre .hljs-function,
-  .preview-content pre .hljs-title { color: #61afef; }
+  .preview-content pre .hljs-title { color: #512d8a; }
   .preview-content pre .hljs-variable,
-  .preview-content pre .hljs-name { color: #e06c75; }
+  .preview-content pre .hljs-name { color: #9a3412; }
   .preview-content pre .hljs-type,
-  .preview-content pre .hljs-class .hljs-title { color: #e5c07b; }
-  .preview-content pre .hljs-tag { color: #e06c75; }
-  .preview-content pre .hljs-params { color: #abb2bf; }
+  .preview-content pre .hljs-class .hljs-title { color: #512d8a; }
+  .preview-content pre .hljs-tag { color: #14532d; }
+  .preview-content pre .hljs-params { color: #1b1f24; }
   .preview-content pre .hljs-operator,
-  .preview-content pre .hljs-punctuation { color: #56b6c2; }
+  .preview-content pre .hljs-punctuation { color: #1b1f24; }
+
+  /* Dark theme code blocks: One Dark palette */
+  .dark .preview-content pre {
+    background: #1a1d27;
+    color: #abb2bf;
+    border: 1.5px solid #2d3147;
+    border-left: 4px solid hsl(var(--primary));
+  }
+  .dark .preview-content pre code { color: inherit; }
+  .dark .preview-content pre .hljs-keyword,
+  .dark .preview-content pre .hljs-selector-tag,
+  .dark .preview-content pre .hljs-built_in { color: #c678dd; }
+  .dark .preview-content pre .hljs-string,
+  .dark .preview-content pre .hljs-attr { color: #98c379; }
+  .dark .preview-content pre .hljs-number,
+  .dark .preview-content pre .hljs-literal { color: #d19a66; }
+  .dark .preview-content pre .hljs-comment { color: #5c6370; font-style: italic; }
+  .dark .preview-content pre .hljs-function,
+  .dark .preview-content pre .hljs-title { color: #61afef; }
+  .dark .preview-content pre .hljs-variable,
+  .dark .preview-content pre .hljs-name { color: #e06c75; }
+  .dark .preview-content pre .hljs-type,
+  .dark .preview-content pre .hljs-class .hljs-title { color: #e5c07b; }
+  .dark .preview-content pre .hljs-tag { color: #e06c75; }
+  .dark .preview-content pre .hljs-params { color: #abb2bf; }
+  .dark .preview-content pre .hljs-operator,
+  .dark .preview-content pre .hljs-punctuation { color: #56b6c2; }
   .preview-content blockquote {
     border-left: 4px solid hsl(var(--primary));
     background: hsl(var(--accent));
@@ -298,6 +326,11 @@
     display: flex;
     justify-content: center;
     margin: 1.5rem 0;
+    /* White "paper" card so the light-themed diagram stays readable in dark mode */
+    background: #ffffff;
+    border: 1px solid hsl(var(--border));
+    border-radius: 8px;
+    padding: 1rem;
   }
   .preview-content .mermaid-diagram svg {
     max-width: 100%;

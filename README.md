@@ -26,10 +26,13 @@ Live preview · Multi-file workspace · Export to PDF, HTML & MD · Google Drive
 
 | | |
 |---|---|
-| **Markdown** | Full GFM : headings, bold, italic, strikethrough, tables, code blocks, blockquotes |
+| **Markdown** | Full GFM : headings, bold, italic, strikethrough, tables, code blocks, blockquotes, footnotes |
 | **LaTeX Math** | Inline `$…$` and display `$$…$$` via KaTeX : plus `align`, `matrix`, `cases` environments |
+| **Mermaid Diagrams** | Flowcharts, sequence, class, state, ER, gantt, pie and more : rendered live and in PDF/HTML export |
+| **Syntax Highlighting** | Highlighted code blocks via highlight.js : dark theme on screen, print-friendly light theme in export |
+| **Find & Replace** | In-editor search with match navigation, case sensitivity, and replace-all (`Ctrl/⌘ F` · `Ctrl/⌘ H`) |
 | **Live Split View** | Resizable editor / preview panes with synchronized scrolling |
-| **Multi-file Workspace** | Create, rename, delete files and folders in a collapsible sidebar |
+| **Multi-file Workspace** | Create, rename, delete, and drag-and-drop files and folders in a collapsible sidebar |
 | **Three Storage Backends** | Browser IndexedDB (default) · Local folder via File System Access API · Google Drive |
 | **Export** | PDF (print dialog) · Standalone HTML · Raw Markdown |
 | **Persistent Preferences** | View mode, dark mode, sidebar state, and last-open file survive page reload |
@@ -84,6 +87,9 @@ VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 | `Ctrl/⌘ \`` | Inline code |
 | `Ctrl/⌘ Z` | Undo |
 | `Ctrl/⌘ Y` / `Ctrl/⌘ Shift Z` | Redo |
+| `Ctrl/⌘ F` | Find |
+| `Ctrl/⌘ H` | Find & Replace |
+| `Enter` / `Shift Enter` | Next / previous match |
 | `Tab` | Insert 2-space indent |
 
 ---
@@ -121,8 +127,10 @@ The `dist/` folder is a static SPA. Deploy to any static host:
 - **React 18** + TypeScript
 - **Vite 5** + SWC (fast builds)
 - **Tailwind CSS** + shadcn/ui + Radix UI
-- **marked** : Markdown parsing (GFM)
+- **marked** + **marked-footnote** : Markdown parsing (GFM, footnotes)
 - **KaTeX** : LaTeX math rendering
+- **Mermaid** : diagram rendering
+- **highlight.js** : code syntax highlighting
 - **DOMPurify** : HTML sanitization
 - **react-resizable-panels** : resizable split views
 - **IndexedDB** : default file storage

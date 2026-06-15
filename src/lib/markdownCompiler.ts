@@ -2,7 +2,10 @@ import { marked } from "marked";
 import markedFootnote from "marked-footnote";
 import katex from "katex";
 import DOMPurify from "dompurify";
-import hljs from "highlight.js";
+// Use the "common" build (~40 popular languages) instead of the full 190+
+// language bundle — meaningfully smaller for edge devices, and covers every
+// language a Markdown editor realistically encounters.
+import hljs from "highlight.js/lib/common";
 
 const MATH_ENVS = [
   "align", "align*", "aligned", "equation", "equation*",
@@ -171,8 +174,19 @@ export function generateHTMLDocument(source: string, title: string): string {
   h3 { font-size: 1.2rem; }
   p { margin: 0.7em 0; }
   code { font-family: 'JetBrains Mono', monospace; background: #f8fafc; border: 1px solid #cbd5e1; color: #1e293b; padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
-  pre { background: #1a1d27; color: #abb2bf; border: 1.5px solid #2d3147; border-left: 4px solid #7c3aed; border-radius: 6px; padding: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
-  pre code { background: transparent; border: none; padding: 0; }
+  pre { background: #f6f8fa; color: #24292e; border: 1px solid #d0d7de; border-left: 4px solid #7c3aed; border-radius: 6px; padding: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  pre code { background: transparent; border: none; padding: 0; color: #24292e; }
+  /* Dark light-theme palette — deep tones that stay legible on monochrome printers */
+  pre .hljs-keyword, pre .hljs-selector-tag, pre .hljs-built_in { color: #8b1a1a; }
+  pre .hljs-string, pre .hljs-attr { color: #032f62; }
+  pre .hljs-number, pre .hljs-literal { color: #003d99; }
+  pre .hljs-comment { color: #4a5056; font-style: italic; }
+  pre .hljs-function, pre .hljs-title { color: #512d8a; }
+  pre .hljs-variable, pre .hljs-name { color: #9a3412; }
+  pre .hljs-type, pre .hljs-class .hljs-title { color: #512d8a; }
+  pre .hljs-tag { color: #14532d; }
+  pre .hljs-params { color: #1b1f24; }
+  pre .hljs-operator, pre .hljs-punctuation { color: #1b1f24; }
   blockquote { border-left: 4px solid #7c3aed; background: #f5f3ff; padding: 0.6rem 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0; }
   table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
   th, td { border: 1px solid #e2e8f0; padding: 0.5rem 0.75rem; text-align: left; }
@@ -185,7 +199,7 @@ export function generateHTMLDocument(source: string, title: string): string {
   .footnotes ol { margin-left: 1.2rem; }
   sup a, .footnotes a { color: #7c3aed; text-decoration: none; font-size: 0.78rem; }
   sup a:hover, .footnotes a:hover { text-decoration: underline; }
-  .mermaid-diagram { display: flex; justify-content: center; margin: 1.5rem 0; }
+  .mermaid-diagram { display: flex; justify-content: center; margin: 1.5rem 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .mermaid-diagram svg { max-width: 100%; height: auto; }
   .mermaid-error { background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; padding: 0.75rem 1rem; color: #991b1b; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; }
   @media print {
@@ -202,8 +216,9 @@ ${body}
 <script>
   // Render mermaid diagrams and expose a promise so the print trigger can wait for completion
   window.__mermaidReady = (async function () {
-    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    mermaid.initialize({ startOnLoad: false, theme: prefersDark ? 'dark' : 'default', securityLevel: 'loose', fontFamily: 'Inter, sans-serif' });
+    // The exported document and printed PDF always have a white background, so
+    // force the light 'default' theme regardless of the user's system preference.
+    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose', fontFamily: 'Inter, sans-serif' });
     var wrappers = Array.from(document.querySelectorAll('.mermaid-wrapper[data-mermaid]'));
     await Promise.all(wrappers.map(async function (el, i) {
       var code = decodeURIComponent(el.getAttribute('data-mermaid') || '');

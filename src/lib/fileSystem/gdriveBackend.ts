@@ -260,7 +260,7 @@ export async function gdriveGetContent(id: string): Promise<string> {
 
 export async function gdriveSaveContent(id: string, text: string): Promise<void> {
   const driveId = await getDriveId(id);
-  await fetch(
+  const res = await fetch(
     `https://www.googleapis.com/upload/drive/v3/files/${driveId}?uploadType=media`,
     {
       method: "PATCH",
@@ -271,6 +271,13 @@ export async function gdriveSaveContent(id: string, text: string): Promise<void>
       body: text,
     },
   );
+  if (!res.ok) {
+    throw new Error(
+      res.status === 401
+        ? "Google Drive session expired — please sign in again."
+        : `Drive save failed (${res.status})`,
+    );
+  }
 }
 
 export async function gdriveCreateFile(
@@ -307,6 +314,13 @@ export async function gdriveCreateFile(
       body,
     },
   );
+  if (!res.ok) {
+    throw new Error(
+      res.status === 401
+        ? "Google Drive session expired — please sign in again."
+        : `Drive file creation failed (${res.status})`,
+    );
+  }
   const data = await res.json();
   const driveId = data.id as string;
   const ourId = crypto.randomUUID();

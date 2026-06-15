@@ -43,7 +43,11 @@ const MarkdownPreview = forwardRef<HTMLDivElement, Props>(function MarkdownPrevi
       const mermaid = await getMermaid();
       if (cancelled) return;
 
-      const theme = darkMode ? "dark" : "default";
+      // Always render with the light theme. Mermaid's built-in "dark" theme is
+      // inconsistent (light actor boxes but dark connector lines/labels), so we
+      // instead place the diagram on a white card (see .mermaid-diagram CSS),
+      // which is readable in both themes and matches the PDF/HTML export.
+      const theme = "default";
       if (mermaidInitTheme !== theme) {
         mermaid.initialize({
           startOnLoad: false,

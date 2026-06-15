@@ -107,6 +107,43 @@ export default function FileTree({
 
     return (
       <div key={node.id}>
+        {/* Drag handlers live on this plain wrapper, NOT on the Radix
+            ContextMenuTrigger child. Radix attaches its own pointer handlers to
+            the trigger, which prevents native HTML5 drag from starting. Keeping
+            the draggable element outside the trigger makes drag reliable. The
+            wrapper holds only the row (children are siblings below), so dragging
+            over a nested child correctly bubbles past it to the root drop zone. */}
+        <div
+          draggable={!isRenaming}
+          onDragStart={(e) => {
+            setDraggingId(node.id);
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", node.id);
+          }}
+          onDragEnd={() => {
+            setDraggingId(null);
+            setDragOverTarget(null);
+          }}
+          onDragOver={(e) => {
+            if (!isDir) return;
+            if (!canDropOnto(node.id)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.dataTransfer.dropEffect = "move";
+            if (dragOverTarget !== node.id) setDragOverTarget(node.id);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              if (dragOverTarget === node.id) setDragOverTarget(null);
+            }
+          }}
+          onDrop={(e) => {
+            if (!isDir) return;
+            e.preventDefault();
+            e.stopPropagation();
+            handleDrop(node.id);
+          }}
+        >
         <ContextMenu>
           <ContextMenuTrigger asChild>
             <div
@@ -119,37 +156,6 @@ export default function FileTree({
                 isDragging && "opacity-40",
               )}
               style={{ paddingLeft: `${8 + depth * 14}px` }}
-              draggable={!isRenaming}
-              onDragStart={(e) => {
-                setDraggingId(node.id);
-                e.dataTransfer.effectAllowed = "move";
-                // Prevent the context-menu ghost from showing a big element
-                e.dataTransfer.setData("text/plain", node.id);
-              }}
-              onDragEnd={() => {
-                setDraggingId(null);
-                setDragOverTarget(null);
-              }}
-              onDragOver={(e) => {
-                if (!isDir) return;
-                if (!canDropOnto(node.id)) return;
-                e.preventDefault();
-                e.stopPropagation();
-                e.dataTransfer.dropEffect = "move";
-                if (dragOverTarget !== node.id) setDragOverTarget(node.id);
-              }}
-              onDragLeave={(e) => {
-                // Only clear if leaving the element entirely (not entering a child)
-                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                  if (dragOverTarget === node.id) setDragOverTarget(null);
-                }
-              }}
-              onDrop={(e) => {
-                if (!isDir) return;
-                e.preventDefault();
-                e.stopPropagation();
-                handleDrop(node.id);
-              }}
               onClick={() => {
                 if (isDir) toggle(node.id);
                 else onOpen(node.id);
@@ -231,6 +237,7 @@ export default function FileTree({
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
+        </div>
 
         {isDir && isOpen && children.length > 0 && (
           <div>
@@ -253,34 +260,60 @@ export default function FileTree({
     );
   }
 
+  // True when the item being dragged isn't already at the root level — only then
+  // is a "move to root" drop meaningful.
+  const draggingNode = draggingId ? nodes.find((n) => n.id === draggingId) : null;
+  const canMoveToRoot = !!draggingNode && draggingNode.parentId !== null;
+
   return (
-    <div className="py-1">
-      {/* Root drop zone — shown while dragging to move item to top level */}
-      {draggingId && (
+    // The whole tree area is a root drop target: dropping on empty space (or on a
+    // file/anything that isn't a folder) moves the item to the top level. Folder
+    // rows stop propagation, so dropping onto a folder still nests inside it.
+    <div
+      className={cn(
+        "py-1 min-h-full transition-colors",
+        canMoveToRoot && dragOverTarget === "root" && "bg-primary/5",
+      )}
+      onDragOver={(e) => {
+        // Accept a root-level drop anywhere that isn't a folder. Folder rows call
+        // stopPropagation so this never fires while hovering them. We always
+        // preventDefault here (the drag event in flight must be preventDefault-ed
+        // for the browser to allow the drop), then resolve the target in handleDrop.
+        if (!draggingId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (canMoveToRoot && dragOverTarget !== "root") setDragOverTarget("root");
+      }}
+      onDrop={(e) => {
+        if (!draggingId) return;
+        e.preventDefault();
+        handleDrop(null);
+      }}
+    >
+      {/* Explicit "move to root" bar — clearly visible whenever a nested item is
+          being dragged, so it's an easy, obvious target. */}
+      {canMoveToRoot && (
         <div
           className={cn(
-            "mx-2 mb-1 flex items-center justify-center rounded-sm border border-dashed text-xs transition-all duration-150",
+            "mx-2 mb-1 flex h-8 items-center justify-center rounded-sm border border-dashed text-xs transition-colors",
             dragOverTarget === "root"
-              ? "h-7 border-primary/50 bg-primary/10 text-primary/70"
-              : "h-1 border-transparent",
+              ? "border-primary/60 bg-primary/15 text-primary font-medium"
+              : "border-border/70 text-muted-foreground",
           )}
           onDragOver={(e) => {
             if (!canDropOnto(null)) return;
             e.preventDefault();
+            e.stopPropagation();
             e.dataTransfer.dropEffect = "move";
             if (dragOverTarget !== "root") setDragOverTarget("root");
           }}
-          onDragLeave={(e) => {
-            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-              if (dragOverTarget === "root") setDragOverTarget(null);
-            }
-          }}
           onDrop={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             handleDrop(null);
           }}
         >
-          {dragOverTarget === "root" && "Move to root"}
+          ↑ Move to root
         </div>
       )}
 
