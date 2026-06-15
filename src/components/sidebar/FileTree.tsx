@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ChevronRight, File, Folder, FolderOpen, Pencil, Check, X } from "lucide-react";
+import { ChevronRight, File, Folder, FolderOpen, Pencil, Check, X, Scissors, ClipboardPaste } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -51,6 +51,8 @@ export default function FileTree({
   // Drag state
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<string | "root" | null>(null);
+  // Cut/paste clipboard (alternative to drag-and-drop)
+  const [cutId, setCutId] = useState<string | null>(null);
 
   const toggle = (id: string) =>
     setExpanded((s) => {
@@ -93,6 +95,26 @@ export default function FileTree({
     setDraggingId(null);
     setDragOverTarget(null);
   };
+
+  // ── Cut / paste helpers ──────────────────────────────────────────────────────
+
+  // Can the cut item be pasted into `targetId`? (null = root)
+  const canPasteInto = (targetId: string | null): boolean => {
+    if (!cutId) return false;
+    if (targetId === null) return true;
+    if (isAncestorOrSelf(nodes, cutId, targetId)) return false; // into self/descendant
+    return true;
+  };
+
+  const pasteInto = (targetId: string | null) => {
+    if (cutId && canPasteInto(targetId)) {
+      onMove(cutId, targetId);
+      if (targetId) setExpanded((s) => new Set(s).add(targetId));
+    }
+    setCutId(null);
+  };
+
+  const cutNode = cutId ? nodes.find((n) => n.id === cutId) : null;
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
@@ -154,6 +176,7 @@ export default function FileTree({
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground",
                 isDragOver && "bg-primary/20 ring-1 ring-inset ring-primary/50 text-primary",
                 isDragging && "opacity-40",
+                cutId === node.id && "opacity-50 italic",
               )}
               style={{ paddingLeft: `${8 + depth * 14}px` }}
               onClick={() => {
@@ -217,6 +240,17 @@ export default function FileTree({
             <ContextMenuItem onClick={() => startRename(node)}>
               <Pencil className="h-3.5 w-3.5 mr-2" /> Rename
             </ContextMenuItem>
+
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => setCutId(node.id)}>
+              <Scissors className="h-3.5 w-3.5 mr-2" /> Cut
+            </ContextMenuItem>
+            {isDir && cutId && canPasteInto(node.id) && (
+              <ContextMenuItem onClick={() => pasteInto(node.id)}>
+                <ClipboardPaste className="h-3.5 w-3.5 mr-2" /> Paste into folder
+              </ContextMenuItem>
+            )}
+
             {isDir && (
               <>
                 <ContextMenuSeparator />
@@ -314,6 +348,32 @@ export default function FileTree({
           }}
         >
           ↑ Move to root
+        </div>
+      )}
+
+      {/* Clipboard bar — shown after "Cut", offers paste-to-root and cancel. */}
+      {cutNode && (
+        <div className="mx-2 mb-1 flex items-center gap-1 rounded-sm border border-primary/40 bg-primary/10 px-2 py-1 text-xs">
+          <ClipboardPaste className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="truncate flex-1 text-foreground/80">
+            {cutNode.name.replace(/\.md$/, "")}
+          </span>
+          {cutNode.parentId !== null && (
+            <button
+              onClick={() => pasteInto(null)}
+              className="shrink-0 rounded px-1.5 py-0.5 font-medium text-primary hover:bg-primary/15"
+              title="Paste to root"
+            >
+              Paste to root
+            </button>
+          )}
+          <button
+            onClick={() => setCutId(null)}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-secondary"
+            title="Cancel"
+          >
+            <X className="h-3 w-3" />
+          </button>
         </div>
       )}
 

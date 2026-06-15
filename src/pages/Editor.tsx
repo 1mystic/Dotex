@@ -94,6 +94,10 @@ export default function Editor() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
+      // In full-preview mode there's no editor to search, so let the keystroke
+      // fall through to the browser's native find (which searches the rendered
+      // preview perfectly). Our custom find/replace only applies to the editor.
+      if (viewMode === "preview") return;
       if (mod && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setFindOpen(true);
@@ -107,7 +111,7 @@ export default function Editor() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
+  }, [viewMode]);
 
   // ── Persist preferences ─────────────────────────────────────────────────────
 
