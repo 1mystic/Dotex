@@ -350,6 +350,7 @@ export default function Editor() {
         <MarkdownPreview
           ref={previewScrollRef}
           source={source}
+          darkMode={darkMode}
           onScroll={viewMode === "split" ? handlePreviewScroll : undefined}
         />
       </div>

@@ -39,10 +39,10 @@ export default function ExportMenu({ source, docTitle }: Props) {
       p { margin: 0.5em 0; }
       pre { font-size: 8.5pt; padding: 0.6rem; }
     </style>`;
-    const finalHtml = html.replace(
-      "</head>",
-      `${printOverride}<script>window.addEventListener('load', () => { setTimeout(() => window.print(), 250); });</script></head>`,
-    );
+    // Wait for __mermaidReady (set by the inline script in generateHTMLDocument)
+    // before opening the print dialog so diagrams are fully rendered.
+    const printScript = `<script>window.addEventListener('load',function(){(window.__mermaidReady||Promise.resolve()).then(function(){setTimeout(function(){window.print();},150);});});<\/script>`;
+    const finalHtml = html.replace("</head>", `${printOverride}${printScript}</head>`);
 
     const blob = new Blob([finalHtml], { type: "text/html" });
     const blobUrl = URL.createObjectURL(blob);

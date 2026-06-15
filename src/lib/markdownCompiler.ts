@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import markedFootnote from "marked-footnote";
 import katex from "katex";
 import DOMPurify from "dompurify";
 import hljs from "highlight.js";
@@ -60,6 +61,39 @@ function processLatex(text: string, mathStore: string[]): string {
   return text;
 }
 
+// Configure marked once at module level: custom code renderer + footnote extension
+marked.use({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    // marked 12 calls this with the legacy (code, infostring, escaped) signature
+    code(code: any, infostring?: string): string {
+      // Be defensive in case a future marked passes a token object instead
+      const text = (code && typeof code === "object" ? code.text : String(code ?? "")) || "";
+      const rawLang =
+        code && typeof code === "object" ? code.lang : infostring;
+      const lang = (rawLang || "").split(/\s/)[0].toLowerCase();
+
+      if (lang === "mermaid") {
+        return `<div class="mermaid-wrapper" data-mermaid="${encodeURIComponent(text)}"></div>`;
+      }
+
+      let highlighted: string;
+      if (lang && hljs.getLanguage(lang)) {
+        try {
+          highlighted = hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+        } catch {
+          highlighted = escapeHtml(text);
+        }
+      } else {
+        highlighted = hljs.highlightAuto(text).value;
+      }
+      return `<pre><code class="hljs language-${escapeHtml(lang)}">${highlighted}</code></pre>`;
+    },
+  },
+});
+marked.use(markedFootnote());
+
 // LRU compile cache — avoids recompiling unchanged source (e.g. during layout shifts)
 const CACHE_MAX = 8;
 const _compileCache = new Map<string, string>();
@@ -94,24 +128,6 @@ function _compile(source: string): string {
   // Restore code
   src = src.replace(/\x00CODE(\d+)\x00/g, (_m, i) => codePlaceholders[+i]);
 
-  const renderer = new marked.Renderer();
-  renderer.code = function (token: any) {
-    const text = (typeof token === "object" ? token.text : token) || "";
-    const lang = ((typeof token === "object" ? token.lang : "") || "").split(/\s/)[0];
-    let highlighted: string;
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        highlighted = hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
-      } catch {
-        highlighted = escapeHtml(text);
-      }
-    } else {
-      highlighted = hljs.highlightAuto(text).value;
-    }
-    return `<pre><code class="hljs language-${escapeHtml(lang)}">${highlighted}</code></pre>`;
-  };
-
-  marked.setOptions({ renderer, gfm: true, breaks: true });
   let html = marked.parse(src) as string;
 
   // Restore math (after marked, before sanitize so KaTeX HTML is sanitized intact)
@@ -128,6 +144,10 @@ function _compile(source: string): string {
       "width", "height", "fill", "stroke", "stroke-width", "d", "cx", "cy",
       "r", "points", "transform", "x", "y", "x1", "x2", "y1", "y2",
       "preserveAspectRatio",
+      // Mermaid placeholder attribute (URL-encoded diagram source)
+      "data-mermaid",
+      // Footnote anchors
+      "id", "href",
     ],
   });
 }
@@ -141,6 +161,8 @@ export function generateHTMLDocument(source: string, title: string): string {
 <title>${escapeHtml(title)}</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<!-- Mermaid — loaded synchronously so the render script below can use it immediately -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"><\/script>
 <style>
   body { font-family: 'Inter', sans-serif; max-width: 760px; margin: 0 auto; padding: 2.5rem 2rem; line-height: 1.55; color: #0f172a; text-align: justify; hyphens: auto; }
   h1, h2, h3, h4 { font-family: 'Inter', sans-serif; line-height: 1.25; margin-top: 1.4em; }
@@ -149,7 +171,7 @@ export function generateHTMLDocument(source: string, title: string): string {
   h3 { font-size: 1.2rem; }
   p { margin: 0.7em 0; }
   code { font-family: 'JetBrains Mono', monospace; background: #f8fafc; border: 1px solid #cbd5e1; color: #1e293b; padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
-  pre { background: #ffffff; color: #1e293b; border: 1.5px solid #94a3b8; border-left: 4px solid #7c3aed; border-radius: 6px; padding: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+  pre { background: #1a1d27; color: #abb2bf; border: 1.5px solid #2d3147; border-left: 4px solid #7c3aed; border-radius: 6px; padding: 1rem; overflow-x: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
   pre code { background: transparent; border: none; padding: 0; }
   blockquote { border-left: 4px solid #7c3aed; background: #f5f3ff; padding: 0.6rem 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0; }
   table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
@@ -159,17 +181,45 @@ export function generateHTMLDocument(source: string, title: string): string {
   .katex-display { background: #faf5ff; border: 1px solid #ddd6fe; border-radius: 0.5rem; padding: 1rem; overflow-x: auto; }
   img { max-width: 100%; }
   hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.5rem 0; }
+  .footnotes { margin-top: 2rem; border-top: 1px solid #e2e8f0; padding-top: 1rem; font-size: 0.85rem; color: #64748b; }
+  .footnotes ol { margin-left: 1.2rem; }
+  sup a, .footnotes a { color: #7c3aed; text-decoration: none; font-size: 0.78rem; }
+  sup a:hover, .footnotes a:hover { text-decoration: underline; }
+  .mermaid-diagram { display: flex; justify-content: center; margin: 1.5rem 0; }
+  .mermaid-diagram svg { max-width: 100%; height: auto; }
+  .mermaid-error { background: #fee2e2; border: 1px solid #fca5a5; border-radius: 6px; padding: 0.75rem 1rem; color: #991b1b; font-family: monospace; font-size: 0.8rem; white-space: pre-wrap; }
   @media print {
     @page { size: A4; margin: 1.8cm 1.8cm 2cm 1.8cm; }
     html, body { font-size: 10pt; }
     body { max-width: none; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    pre, blockquote, table { page-break-inside: avoid; }
+    pre, blockquote, table, .mermaid-diagram { page-break-inside: avoid; }
     h1, h2, h3 { page-break-after: avoid; }
   }
 </style>
 </head>
 <body>
 ${body}
+<script>
+  // Render mermaid diagrams and expose a promise so the print trigger can wait for completion
+  window.__mermaidReady = (async function () {
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({ startOnLoad: false, theme: prefersDark ? 'dark' : 'default', securityLevel: 'loose', fontFamily: 'Inter, sans-serif' });
+    var wrappers = Array.from(document.querySelectorAll('.mermaid-wrapper[data-mermaid]'));
+    await Promise.all(wrappers.map(async function (el, i) {
+      var code = decodeURIComponent(el.getAttribute('data-mermaid') || '');
+      if (!code.trim()) return;
+      try {
+        var result = await mermaid.render('mermaid-export-' + i + '-' + Date.now(), code);
+        var d = document.createElement('div');
+        d.className = 'mermaid-diagram';
+        d.innerHTML = result.svg;
+        el.parentNode.replaceChild(d, el);
+      } catch (e) {
+        el.innerHTML = '<div class="mermaid-error">⚠ Diagram error: ' + String(e.message || e).substring(0, 300) + '</div>';
+      }
+    }));
+  })();
+<\/script>
 </body>
 </html>`;
 }
