@@ -70,7 +70,7 @@ export default function FileTree({
           <ContextMenuTrigger asChild>
             <div
               className={cn(
-                "flex items-center gap-1.5 px-2 py-[3px] rounded-md cursor-pointer select-none group text-sm",
+                "flex items-center gap-1.5 px-2 py-1.5 rounded-sm cursor-pointer select-none group text-sm",
                 isActive
                   ? "bg-primary/15 text-primary font-medium"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground",
@@ -123,7 +123,7 @@ export default function FileTree({
                   </button>
                 </div>
               ) : (
-                <span className="truncate flex-1 text-xs">
+                <span className="truncate flex-1 text-sm">
                   {node.type === "file" ? node.name.replace(/\.md$/, "") : node.name}
                 </span>
               )}

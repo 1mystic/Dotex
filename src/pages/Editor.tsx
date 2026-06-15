@@ -20,6 +20,7 @@ import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
 
 type ViewMode = "editor" | "split" | "preview";
 
+
 // ── Mobile detection ──────────────────────────────────────────────────────────
 
 function useIsMobile(breakpoint = 768) {
@@ -49,7 +50,7 @@ function savePref(key: string, value: unknown) {
 // ── Editor ────────────────────────────────────────────────────────────────────
 
 export default function Editor() {
-  const { nodes, activeFileId, isReady, openFile, getContent, saveContent } = useFileSystem();
+  const { nodes, activeFileId, isReady, openFile, getContent, saveContent, renameNode } = useFileSystem();
   const isMobile = useIsMobile();
 
   // Preferences
@@ -118,7 +119,24 @@ export default function Editor() {
       historyRef.current = [content];
       historyIndexRef.current = 0;
     });
-  }, [activeFileId, isReady, getContent, nodes]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFileId, isReady, getContent]);
+
+  // ── Sync title when active file is renamed externally (e.g. from sidebar) ──
+
+  useEffect(() => {
+    if (!activeFileId) return;
+    const node = nodes.find((n) => n.id === activeFileId);
+    if (!node) return;
+    setTitle(node.name.replace(/\.md$/, ""));
+  }, [nodes, activeFileId]);
+
+  // ── Title change (header edit → persist to file system) ────────────────────
+
+  const handleTitleChange = useCallback((newTitle: string) => {
+    setTitle(newTitle);
+    if (activeFileId) renameNode(activeFileId, newTitle);
+  }, [activeFileId, renameNode]);
 
   // ── Auto-save ───────────────────────────────────────────────────────────────
 
@@ -272,9 +290,6 @@ export default function Editor() {
 
   const editorArea = (
     <div className="flex flex-col min-h-0 w-full h-full border-r border-border">
-      <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
-        Source
-      </div>
       <textarea
         ref={textareaRef}
         className="editor-textarea flex-1"
@@ -292,9 +307,6 @@ export default function Editor() {
 
   const previewArea = (
     <div className="flex flex-col min-h-0 h-full">
-      <div className="shrink-0 px-4 py-1.5 text-[10px] font-mono uppercase tracking-wider text-muted-foreground bg-card border-b border-border">
-        Preview
-      </div>
       <div className="flex-1 min-h-0">
         <MarkdownPreview
           ref={previewScrollRef}
@@ -354,7 +366,7 @@ export default function Editor() {
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       <DocumentHeader
         title={title}
-        onTitleChange={setTitle}
+        onTitleChange={handleTitleChange}
         source={source}
         viewMode={viewMode}
         onViewMode={setViewMode}
