@@ -25,11 +25,11 @@
     --ring: 252 87% 62%;
     --radius: 0.75rem;
 
-    --editor-bg: 220 18% 11%;
-    --editor-fg: 210 20% 88%;
-    --editor-line: 220 15% 18%;
-    --editor-cursor: 252 87% 72%;
-    --editor-selection: 252 87% 30%;
+    --editor-bg: 0 0% 100%;
+    --editor-fg: 220 15% 13%;
+    --editor-line: 220 14% 93%;
+    --editor-cursor: 252 87% 55%;
+    --editor-selection: 252 70% 80%;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -42,6 +42,12 @@
   }
 
   .dark {
+    --editor-bg: 220 18% 11%;
+    --editor-fg: 210 20% 88%;
+    --editor-line: 220 15% 18%;
+    --editor-cursor: 252 87% 72%;
+    --editor-selection: 252 87% 30%;
+
     --background: 220 18% 9%;
     --foreground: 210 20% 92%;
     --card: 220 18% 12%;
@@ -168,9 +174,9 @@
     border-radius: 4px;
   }
   .preview-content pre {
-    background: #ffffff;
-    color: #1e293b;
-    border: 1.5px solid #94a3b8;
+    background: #1a1d27;
+    color: #abb2bf;
+    border: 1.5px solid #2d3147;
     border-left: 4px solid hsl(var(--primary));
     border-radius: 6px;
     padding: 1rem;
@@ -186,6 +192,25 @@
     padding: 0;
     font-size: inherit;
   }
+  /* Syntax highlight token colours (One Dark palette) */
+  .preview-content pre .hljs-keyword,
+  .preview-content pre .hljs-selector-tag,
+  .preview-content pre .hljs-built_in { color: #c678dd; }
+  .preview-content pre .hljs-string,
+  .preview-content pre .hljs-attr { color: #98c379; }
+  .preview-content pre .hljs-number,
+  .preview-content pre .hljs-literal { color: #d19a66; }
+  .preview-content pre .hljs-comment { color: #5c6370; font-style: italic; }
+  .preview-content pre .hljs-function,
+  .preview-content pre .hljs-title { color: #61afef; }
+  .preview-content pre .hljs-variable,
+  .preview-content pre .hljs-name { color: #e06c75; }
+  .preview-content pre .hljs-type,
+  .preview-content pre .hljs-class .hljs-title { color: #e5c07b; }
+  .preview-content pre .hljs-tag { color: #e06c75; }
+  .preview-content pre .hljs-params { color: #abb2bf; }
+  .preview-content pre .hljs-operator,
+  .preview-content pre .hljs-punctuation { color: #56b6c2; }
   .preview-content blockquote {
     border-left: 4px solid hsl(var(--primary));
     background: hsl(var(--accent));
@@ -229,10 +254,4 @@
     border-radius: 0.5rem;
   }
 
-  /* Dark mode code blocks inside preview */
-  .dark .preview-content pre {
-    background: hsl(220 18% 14%);
-    color: hsl(210 20% 88%);
-    border-color: hsl(220 15% 25%);
-  }
 }

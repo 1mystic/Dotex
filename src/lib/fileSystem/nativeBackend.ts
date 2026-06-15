@@ -221,6 +221,35 @@ export async function nativeDeleteEntry(id: string): Promise<void> {
   await saveMap(map);
 }
 
+export async function nativeMoveFile(id: string, newParentId: string | null): Promise<void> {
+  const map = await loadMap();
+  const fullPath = map.idToPath[id];
+  if (!fullPath) throw new Error("File not found in native FS");
+
+  const parts = fullPath.split("/");
+  const name = parts[parts.length - 1];
+  const oldParentParts = parts.slice(0, -1);
+
+  const newParentPath = newParentId ? map.idToPath[newParentId] ?? "" : "";
+  const newPath = newParentPath ? `${newParentPath}/${name}` : name;
+  if (fullPath === newPath) return;
+
+  const content = await nativeGetContent(id);
+  const newParentDir = newParentPath ? await resolveDir(newParentPath.split("/")) : rootHandle!;
+  const newFh = await newParentDir.getFileHandle(name, { create: true });
+  const writable = await newFh.createWritable();
+  await writable.write(content);
+  await writable.close();
+
+  const oldParentDir = oldParentParts.length > 0 ? await resolveDir(oldParentParts) : rootHandle!;
+  await (oldParentDir as any).removeEntry(name);
+
+  delete map.pathToId[fullPath];
+  map.pathToId[newPath] = id;
+  map.idToPath[id] = newPath;
+  await saveMap(map);
+}
+
 export async function nativeRenameFile(id: string, newName: string): Promise<void> {
   const map = await loadMap();
   const fullPath = map.idToPath[id];

@@ -18,6 +18,19 @@ interface Props {
   onDelete: (id: string) => void;
   onNewFile: (parentId: string | null) => void;
   onNewFolder: (parentId: string | null) => void;
+  onMove: (id: string, newParentId: string | null) => void;
+}
+
+// Returns true if `nodeId` is an ancestor of `targetId` (or equal).
+// Used to prevent dropping a folder into itself or its descendants.
+function isAncestorOrSelf(nodes: FileNode[], nodeId: string, targetId: string): boolean {
+  if (nodeId === targetId) return true;
+  let cur = nodes.find((n) => n.id === targetId);
+  while (cur?.parentId) {
+    if (cur.parentId === nodeId) return true;
+    cur = nodes.find((n) => n.id === cur!.parentId);
+  }
+  return false;
 }
 
 export default function FileTree({
@@ -28,11 +41,16 @@ export default function FileTree({
   onDelete,
   onNewFile,
   onNewFolder,
+  onMove,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // Drag state
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | "root" | null>(null);
 
   const toggle = (id: string) =>
     setExpanded((s) => {
@@ -43,7 +61,6 @@ export default function FileTree({
 
   const startRename = (node: FileNode) => {
     setRenamingId(node.id);
-    // Strip .md for display convenience
     setRenameDraft(node.name.replace(/\.md$/, ""));
     requestAnimationFrame(() => renameInputRef.current?.select());
   };
@@ -57,11 +74,35 @@ export default function FileTree({
 
   const cancelRename = () => setRenamingId(null);
 
+  // ── Drag helpers ─────────────────────────────────────────────────────────────
+
+  const canDropOnto = (targetId: string | null): boolean => {
+    if (!draggingId) return false;
+    if (targetId === null) return true; // root always valid
+    if (isAncestorOrSelf(nodes, draggingId, targetId)) return false;
+    // Don't drop onto the node's current parent (no-op, but still allow — harmless)
+    return true;
+  };
+
+  const handleDrop = (targetId: string | null) => {
+    if (draggingId && canDropOnto(targetId)) {
+      onMove(draggingId, targetId);
+      // Auto-expand target folder so the dropped item is visible
+      if (targetId) setExpanded((s) => new Set(s).add(targetId));
+    }
+    setDraggingId(null);
+    setDragOverTarget(null);
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
+
   const renderNode = (node: FileNode, depth: number) => {
     const isDir = node.type === "dir";
     const isOpen = expanded.has(node.id);
     const isActive = node.id === activeFileId;
     const isRenaming = renamingId === node.id;
+    const isDragging = draggingId === node.id;
+    const isDragOver = isDir && dragOverTarget === node.id;
     const children = nodes.filter((n) => n.parentId === node.id);
 
     return (
@@ -70,12 +111,45 @@ export default function FileTree({
           <ContextMenuTrigger asChild>
             <div
               className={cn(
-                "flex items-center gap-1.5 px-2 py-1.5 rounded-sm cursor-pointer select-none group text-sm",
-                isActive
+                "flex items-center gap-1.5 px-2 py-1.5 rounded-sm cursor-pointer select-none group text-sm transition-colors",
+                isActive && !isDragOver
                   ? "bg-primary/15 text-primary font-medium"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                isDragOver && "bg-primary/20 ring-1 ring-inset ring-primary/50 text-primary",
+                isDragging && "opacity-40",
               )}
               style={{ paddingLeft: `${8 + depth * 14}px` }}
+              draggable={!isRenaming}
+              onDragStart={(e) => {
+                setDraggingId(node.id);
+                e.dataTransfer.effectAllowed = "move";
+                // Prevent the context-menu ghost from showing a big element
+                e.dataTransfer.setData("text/plain", node.id);
+              }}
+              onDragEnd={() => {
+                setDraggingId(null);
+                setDragOverTarget(null);
+              }}
+              onDragOver={(e) => {
+                if (!isDir) return;
+                if (!canDropOnto(node.id)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = "move";
+                if (dragOverTarget !== node.id) setDragOverTarget(node.id);
+              }}
+              onDragLeave={(e) => {
+                // Only clear if leaving the element entirely (not entering a child)
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  if (dragOverTarget === node.id) setDragOverTarget(null);
+                }
+              }}
+              onDrop={(e) => {
+                if (!isDir) return;
+                e.preventDefault();
+                e.stopPropagation();
+                handleDrop(node.id);
+              }}
               onClick={() => {
                 if (isDir) toggle(node.id);
                 else onOpen(node.id);
@@ -181,6 +255,35 @@ export default function FileTree({
 
   return (
     <div className="py-1">
+      {/* Root drop zone — shown while dragging to move item to top level */}
+      {draggingId && (
+        <div
+          className={cn(
+            "mx-2 mb-1 flex items-center justify-center rounded-sm border border-dashed text-xs transition-all duration-150",
+            dragOverTarget === "root"
+              ? "h-7 border-primary/50 bg-primary/10 text-primary/70"
+              : "h-1 border-transparent",
+          )}
+          onDragOver={(e) => {
+            if (!canDropOnto(null)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            if (dragOverTarget !== "root") setDragOverTarget("root");
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              if (dragOverTarget === "root") setDragOverTarget(null);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            handleDrop(null);
+          }}
+        >
+          {dragOverTarget === "root" && "Move to root"}
+        </div>
+      )}
+
       {roots.map((n) => renderNode(n, 0))}
     </div>
   );

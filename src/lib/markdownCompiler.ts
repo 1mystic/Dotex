@@ -1,6 +1,7 @@
 import { marked } from "marked";
 import katex from "katex";
 import DOMPurify from "dompurify";
+import hljs from "highlight.js";
 
 const MATH_ENVS = [
   "align", "align*", "aligned", "equation", "equation*",
@@ -96,8 +97,18 @@ function _compile(source: string): string {
   const renderer = new marked.Renderer();
   renderer.code = function (token: any) {
     const text = (typeof token === "object" ? token.text : token) || "";
-    const lang = (typeof token === "object" ? token.lang : "") || "";
-    return `<pre><code class="language-${escapeHtml(lang)}">${escapeHtml(text)}</code></pre>`;
+    const lang = ((typeof token === "object" ? token.lang : "") || "").split(/\s/)[0];
+    let highlighted: string;
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        highlighted = hljs.highlight(text, { language: lang, ignoreIllegals: true }).value;
+      } catch {
+        highlighted = escapeHtml(text);
+      }
+    } else {
+      highlighted = hljs.highlightAuto(text).value;
+    }
+    return `<pre><code class="hljs language-${escapeHtml(lang)}">${highlighted}</code></pre>`;
   };
 
   marked.setOptions({ renderer, gfm: true, breaks: true });

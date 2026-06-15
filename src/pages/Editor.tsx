@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type ImperativePanelHandle } from "react-resizable-panels";
 import DocumentHeader from "@/components/editor/DocumentHeader";
 import EditorToolbar from "@/components/editor/EditorToolbar";
+import FindReplace from "@/components/editor/FindReplace";
 import MarkdownPreview from "@/components/editor/MarkdownPreview";
 import StatusBar from "@/components/editor/StatusBar";
 import FileSidebar from "@/components/sidebar/FileSidebar";
@@ -66,6 +67,8 @@ export default function Editor() {
   const [title, setTitle] = useState("Untitled");
   const [cursor, setCursor] = useState({ line: 1, col: 1 });
   const [pendingNewParentId, setPendingNewParentId] = useState<string | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [showReplace, setShowReplace] = useState(false);
 
   // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -85,6 +88,26 @@ export default function Editor() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", darkMode);
   }, [darkMode]);
+
+  // ── Global find/replace shortcuts ───────────────────────────────────────────
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setFindOpen(true);
+        setShowReplace(false);
+      }
+      if (mod && e.key.toLowerCase() === "h") {
+        e.preventDefault();
+        setFindOpen(true);
+        setShowReplace(true);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
 
   // ── Persist preferences ─────────────────────────────────────────────────────
 
@@ -264,6 +287,9 @@ export default function Editor() {
     if (mod && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if (mod && ((e.key.toLowerCase() === "z" && e.shiftKey) || e.key.toLowerCase() === "y")) { e.preventDefault(); redo(); return; }
     if (mod && e.key.toLowerCase() === "s") { e.preventDefault(); return; }
+    if (mod && e.key.toLowerCase() === "f") { e.preventDefault(); setFindOpen(true); setShowReplace(false); return; }
+    if (mod && e.key.toLowerCase() === "h") { e.preventDefault(); setFindOpen(true); setShowReplace(true); return; }
+    if (e.key === "Escape" && findOpen) { setFindOpen(false); return; }
     if (mod && e.key.toLowerCase() === "b") { e.preventDefault(); wrapSelection("**", "**"); return; }
     if (mod && e.key.toLowerCase() === "i") { e.preventDefault(); wrapSelection("_", "_"); return; }
     if (mod && e.key === "`") { e.preventDefault(); wrapSelection("`", "`"); return; }
@@ -289,7 +315,7 @@ export default function Editor() {
   // ── Shared editor / preview areas ───────────────────────────────────────────
 
   const editorArea = (
-    <div className="flex flex-col min-h-0 w-full h-full border-r border-border">
+    <div className="relative flex flex-col min-h-0 w-full h-full border-r border-border">
       <textarea
         ref={textareaRef}
         className="editor-textarea flex-1"
@@ -302,6 +328,19 @@ export default function Editor() {
         onScroll={viewMode === "split" ? handleEditorScroll : undefined}
         spellCheck={false}
       />
+      {findOpen && (
+        <FindReplace
+          source={source}
+          textareaRef={textareaRef}
+          showReplace={showReplace}
+          onToggleReplace={() => setShowReplace((v) => !v)}
+          onChange={handleSourceChange}
+          onClose={() => {
+            setFindOpen(false);
+            textareaRef.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 

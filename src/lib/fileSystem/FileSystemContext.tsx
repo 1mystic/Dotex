@@ -12,6 +12,7 @@ import {
   idbDeleteNode,
   idbGetContent,
   idbListAll,
+  idbMoveNode,
   idbRenameNode,
   idbSaveContent,
   idbSeedWelcome,
@@ -26,6 +27,7 @@ import {
   nativeInit,
   nativeMount,
   nativeRenameFile,
+  nativeMoveFile,
   nativeRequestPermission,
   nativeSaveContent,
   nativeScan,
@@ -38,6 +40,7 @@ import {
   gdriveGetContent,
   gdriveGetUser,
   gdriveListAll,
+  gdriveMove,
   gdriveRename,
   gdriveSaveContent,
   gdriveSignIn,
@@ -288,6 +291,25 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     [nodes],
   );
 
+  const moveNode = useCallback(
+    async (id: string, newParentId: string | null): Promise<void> => {
+      const b = backendRef.current;
+      if (b === "native") {
+        const node = nodes.find((n) => n.id === id);
+        if (node?.type === "dir") throw new Error("Moving folders is not supported in Local Folder mode");
+        await nativeMoveFile(id, newParentId);
+      } else if (b === "gdrive") {
+        await gdriveMove(id, newParentId);
+      } else {
+        await idbMoveNode(id, newParentId);
+      }
+      setNodes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, parentId: newParentId, updatedAt: Date.now() } : n)),
+      );
+    },
+    [nodes],
+  );
+
   const getContent = useCallback(
     async (id: string): Promise<string> => {
       const b = backendRef.current;
@@ -396,6 +418,7 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     createDir,
     deleteNode,
     renameNode,
+    moveNode,
     getContent,
     saveContent,
     mountLocalFolder,

@@ -22,6 +22,7 @@ export interface FileSystemContextValue {
   createDir: (parentId: string | null, name: string) => Promise<FileNode>;
   deleteNode: (id: string) => Promise<void>;
   renameNode: (id: string, newName: string) => Promise<void>;
+  moveNode: (id: string, newParentId: string | null) => Promise<void>;
   getContent: (id: string) => Promise<string>;
   saveContent: (id: string, content: string) => Promise<void>;
   mountLocalFolder: () => Promise<void>;

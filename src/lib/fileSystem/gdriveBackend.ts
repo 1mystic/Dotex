@@ -364,6 +364,26 @@ export async function gdriveRename(id: string, newName: string): Promise<void> {
   });
 }
 
+export async function gdriveMove(id: string, newParentId: string | null): Promise<void> {
+  const rootId = await getOrCreateRootFolder();
+  const map = await loadMap();
+  if (!map) throw new Error("No Drive map");
+  const driveId = map.idToDriveId[id];
+  if (!driveId) throw new Error("File not found in Drive");
+  const newDriveParentId = newParentId ? map.idToDriveId[newParentId] : rootId;
+  if (!newDriveParentId) throw new Error("Target folder not found in Drive");
+  // Fetch current parents to remove them
+  const info = await driveRequest(
+    `https://www.googleapis.com/drive/v3/files/${driveId}?fields=parents`,
+    { method: "GET" },
+  );
+  const oldParents = ((info.parents ?? []) as string[]).join(",");
+  await driveRequest(
+    `https://www.googleapis.com/drive/v3/files/${driveId}?addParents=${newDriveParentId}&removeParents=${oldParents}&fields=id`,
+    { method: "PATCH" },
+  );
+}
+
 export async function gdriveClearMap(): Promise<void> {
   await dbDelete("meta", MAP_KEY);
 }

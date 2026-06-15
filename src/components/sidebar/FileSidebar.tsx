@@ -104,6 +104,7 @@ export default function FileSidebar({ pendingNewParentId, setPendingNewParentId,
     createDir,
     deleteNode,
     renameNode,
+    moveNode,
     mountLocalFolder,
     unmountLocalFolder,
     signInWithGoogle,
@@ -267,6 +268,13 @@ export default function FileSidebar({ pendingNewParentId, setPendingNewParentId,
           onOpen={openFile}
           onRename={renameNode}
           onDelete={deleteNode}
+          onMove={async (id, newParentId) => {
+            try {
+              await moveNode(id, newParentId);
+            } catch (e: any) {
+              toast.error(e?.message ?? "Failed to move item");
+            }
+          }}
           onNewFile={(parentId) => openDialog("file", parentId)}
           onNewFolder={(parentId) => openDialog("folder", parentId)}
         />

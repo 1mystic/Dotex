@@ -52,9 +52,9 @@ export default function DocumentHeader({
         >
           <PanelLeftOpen className="h-4 w-4" />
         </Button>
-        <img src="/favicon.svg" alt="Dotex" className="h-7 w-7 shrink-0" />
-        <span className="font-semibold hidden sm:inline">Dotex</span>
-        <Badge variant="secondary" className="hidden sm:inline-flex text-[10px]">2026</Badge>
+        <img src="/favicon.svg" alt="Dotex" className="h-8 w-8 shrink-0" />
+        <span className="text-base font-bold hidden sm:inline">Dotex</span>
+        <Badge variant="secondary" className="hidden sm:inline-flex text-xs">2026</Badge>
         <Separator orientation="vertical" className="h-5" />
         {editing ? (
           <div className="flex items-center gap-1 min-w-0">
@@ -74,7 +74,7 @@ export default function DocumentHeader({
           </div>
         ) : (
           <button
-            className="group flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground truncate"
+            className="group flex items-center gap-1.5 text-[15px] text-foreground/80 hover:text-foreground truncate"
             onClick={() => { setDraft(title); setEditing(true); }}
           >
             <span className="truncate">{title}</span>

@@ -39,6 +39,11 @@ export async function idbRenameNode(id: string, name: string): Promise<void> {
   if (node) await dbPut("nodes", { ...node, name, updatedAt: Date.now() });
 }
 
+export async function idbMoveNode(id: string, newParentId: string | null): Promise<void> {
+  const node = await dbGet<FileNode>("nodes", id);
+  if (node) await dbPut("nodes", { ...node, parentId: newParentId, updatedAt: Date.now() });
+}
+
 export function idbBuildTree(nodes: FileNode[]): FileNode[] {
   return nodes;
 }
