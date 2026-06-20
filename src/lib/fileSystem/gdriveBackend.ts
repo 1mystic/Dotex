@@ -14,7 +14,9 @@ import { dbGet, dbPut, dbDelete } from "../db";
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 const SCOPES = "https://www.googleapis.com/auth/drive.file";
-const ROOT_FOLDER_NAME = "Texflow Notes";
+const ROOT_FOLDER_NAME = "Dotex";
+// Folder name used by earlier versions — adopted and renamed on first load.
+const LEGACY_ROOT_FOLDER_NAMES = ["Texflow Notes", "Texflow"];
 const MAP_KEY = "gdrive-map";
 const TOKEN_KEY = "gdrive-token";
 const USER_KEY = "gdrive-user";
@@ -23,6 +25,8 @@ interface DriveMap {
   rootFolderId: string;
   idToDriveId: Record<string, string>;
   driveIdToId: Record<string, string>;
+  // Set once the root folder has been (re)named to ROOT_FOLDER_NAME.
+  nameMigrated?: boolean;
 }
 
 // In-memory token cache
@@ -141,34 +145,67 @@ async function saveMapData(data: DriveMap): Promise<void> {
   await dbPut("meta", { key: MAP_KEY, data });
 }
 
-async function getOrCreateRootFolder(): Promise<string> {
-  const map = await loadMap();
-  if (map?.rootFolderId) return map.rootFolderId;
+async function renameDriveFolder(id: string, name: string): Promise<void> {
+  try {
+    await driveRequest(`https://www.googleapis.com/drive/v3/files/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+  } catch {
+    /* non-fatal — keep using the existing folder under its old name */
+  }
+}
 
-  // Search for existing folder
+async function findFolderByName(name: string): Promise<string | null> {
   const q = encodeURIComponent(
-    `name='${ROOT_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
   );
   const list = await driveRequest(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
   );
-  if (list.files?.length > 0) {
-    const id = list.files[0].id as string;
-    await saveMapData({ rootFolderId: id, idToDriveId: {}, driveIdToId: {} });
-    return id;
+  return list.files?.length > 0 ? (list.files[0].id as string) : null;
+}
+
+async function getOrCreateRootFolder(): Promise<string> {
+  const map = await loadMap();
+  if (map?.rootFolderId) {
+    // One-time migration: ensure the existing root folder is named "Dotex".
+    if (!map.nameMigrated) {
+      await renameDriveFolder(map.rootFolderId, ROOT_FOLDER_NAME);
+      await saveMapData({ ...map, nameMigrated: true });
+    }
+    return map.rootFolderId;
   }
 
-  // Create new folder
-  const folder = await driveRequest("https://www.googleapis.com/drive/v3/files", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: ROOT_FOLDER_NAME,
-      mimeType: "application/vnd.google-apps.folder",
-    }),
-  });
-  await saveMapData({ rootFolderId: folder.id, idToDriveId: {}, driveIdToId: {} });
-  return folder.id as string;
+  // Adopt an existing folder — current name first, then any legacy name (which we
+  // rename to "Dotex" so old files created by earlier versions keep working).
+  let id = await findFolderByName(ROOT_FOLDER_NAME);
+  if (!id) {
+    for (const legacy of LEGACY_ROOT_FOLDER_NAMES) {
+      id = await findFolderByName(legacy);
+      if (id) {
+        await renameDriveFolder(id, ROOT_FOLDER_NAME);
+        break;
+      }
+    }
+  }
+
+  if (!id) {
+    // Create a fresh folder.
+    const folder = await driveRequest("https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: ROOT_FOLDER_NAME,
+        mimeType: "application/vnd.google-apps.folder",
+      }),
+    });
+    id = folder.id as string;
+  }
+
+  await saveMapData({ rootFolderId: id, idToDriveId: {}, driveIdToId: {}, nameMigrated: true });
+  return id;
 }
 
 // ── File listing ──────────────────────────────────────────────────────────────
@@ -201,9 +238,13 @@ export async function gdriveListAll(): Promise<FileNode[]> {
   const driveToOur = new Map<string, string | null>();
   driveToOur.set(rootId, null); // root maps to parentId null
 
-  // First pass: folders
+  // First pass: folders. Skip the root folder itself — it must keep its
+  // rootId → null mapping (set above). If we don't skip it, the root folder
+  // appears in the list and gets a fresh node id, so every root-level file ends
+  // up with a parentId that has no matching node and silently disappears.
   for (const f of driveFiles) {
     if (f.mimeType !== folderMime) continue;
+    if (f.id === rootId) continue;
     let ourId = map.driveIdToId[f.id];
     if (!ourId) {
       ourId = crypto.randomUUID();
@@ -215,6 +256,7 @@ export async function gdriveListAll(): Promise<FileNode[]> {
 
   // Second pass: build nodes (folders first, then files)
   for (const f of driveFiles) {
+    if (f.id === rootId) continue; // never list the root folder as a node
     const parentDriveId = f.parents?.[0];
     if (!parentDriveId || !driveToOur.has(parentDriveId)) continue; // outside our tree
     const parentId = driveToOur.get(parentDriveId) ?? null;

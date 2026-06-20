@@ -1,4 +1,4 @@
-import { forwardRef, useDeferredValue, useEffect, useMemo, useRef } from "react";
+import { forwardRef, useDeferredValue, useLayoutEffect, useMemo, useRef } from "react";
 import { compile } from "@/lib/markdownCompiler";
 
 interface Props {
@@ -19,6 +19,37 @@ function getMermaid() {
 // Track initialized theme so we only re-initialize when it changes
 let mermaidInitTheme: string | null = null;
 
+// Cache rendered SVGs keyed by diagram source. Because the preview HTML is fully
+// regenerated on every keystroke, the DOM (and any rendered diagram) is replaced
+// each time — without this cache, every diagram would re-render and flash on each
+// edit. With it, unchanged diagrams are swapped back in synchronously (before
+// paint), so only a genuinely new/edited diagram ever re-renders.
+const SVG_CACHE_MAX = 60;
+const svgCache = new Map<string, string>();
+function svgCacheGet(code: string): string | undefined {
+  const v = svgCache.get(code);
+  if (v !== undefined) {
+    svgCache.delete(code); // refresh LRU recency
+    svgCache.set(code, v);
+  }
+  return v;
+}
+function svgCacheSet(code: string, svg: string) {
+  if (svgCache.has(code)) svgCache.delete(code);
+  svgCache.set(code, svg);
+  if (svgCache.size > SVG_CACHE_MAX) {
+    svgCache.delete(svgCache.keys().next().value!);
+  }
+}
+
+function replaceWithSvg(el: HTMLElement, svg: string) {
+  if (!el.isConnected) return;
+  const div = document.createElement("div");
+  div.className = "mermaid-diagram";
+  div.innerHTML = svg;
+  el.replaceWith(div);
+}
+
 const MarkdownPreview = forwardRef<HTMLDivElement, Props>(function MarkdownPreview(
   { source, darkMode = true, onScroll }: Props,
   ref,
@@ -28,8 +59,10 @@ const MarkdownPreview = forwardRef<HTMLDivElement, Props>(function MarkdownPrevi
   const isPending = deferredSource !== source;
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Render mermaid diagrams whenever the compiled HTML changes or dark mode switches
-  useEffect(() => {
+  // Render mermaid diagrams. useLayoutEffect (not useEffect) runs synchronously
+  // after React commits the DOM but BEFORE the browser paints — so cached diagrams
+  // are swapped in with zero visible flash and no layout shift on every keystroke.
+  useLayoutEffect(() => {
     const container = contentRef.current;
     if (!container) return;
     const wrappers = Array.from(
@@ -37,16 +70,25 @@ const MarkdownPreview = forwardRef<HTMLDivElement, Props>(function MarkdownPrevi
     );
     if (!wrappers.length) return;
 
-    let cancelled = false;
+    // 1. Synchronously swap in any diagrams we've already rendered. This is the
+    //    common case while typing, and runs before paint → no flash/jitter.
+    const pending: HTMLElement[] = [];
+    for (const el of wrappers) {
+      const code = decodeURIComponent(el.getAttribute("data-mermaid") ?? "");
+      if (!code.trim()) continue;
+      const cached = svgCacheGet(code);
+      if (cached) replaceWithSvg(el, cached);
+      else pending.push(el);
+    }
+    if (!pending.length) return;
 
+    // 2. Asynchronously render only the new/changed diagrams.
+    let cancelled = false;
     (async () => {
       const mermaid = await getMermaid();
       if (cancelled) return;
 
-      // Always render with the light theme. Mermaid's built-in "dark" theme is
-      // inconsistent (light actor boxes but dark connector lines/labels), so we
-      // instead place the diagram on a white card (see .mermaid-diagram CSS),
-      // which is readable in both themes and matches the PDF/HTML export.
+      // Always render with the light theme — see .mermaid-diagram CSS (white card).
       const theme = "default";
       if (mermaidInitTheme !== theme) {
         mermaid.initialize({
@@ -59,21 +101,15 @@ const MarkdownPreview = forwardRef<HTMLDivElement, Props>(function MarkdownPrevi
       }
 
       await Promise.all(
-        wrappers.map(async (el, i) => {
-          if (cancelled) return;
-          const encoded = el.getAttribute("data-mermaid") ?? "";
-          const code = decodeURIComponent(encoded);
-          if (!code.trim()) return;
-
+        pending.map(async (el, i) => {
+          if (cancelled || !el.isConnected) return;
+          const code = decodeURIComponent(el.getAttribute("data-mermaid") ?? "");
           const id = `mermaid-live-${i}-${Date.now()}`;
           try {
             const { svg } = await mermaid.render(id, code);
             if (cancelled) return;
-            const wrapper = document.createElement("div");
-            wrapper.className = "mermaid-diagram";
-            wrapper.innerHTML = svg;
-            // Only replace if the original placeholder is still in the DOM
-            if (el.isConnected) el.replaceWith(wrapper);
+            svgCacheSet(code, svg);
+            replaceWithSvg(el, svg);
           } catch (err: any) {
             if (cancelled || !el.isConnected) return;
             const errDiv = document.createElement("div");
@@ -85,7 +121,6 @@ const MarkdownPreview = forwardRef<HTMLDivElement, Props>(function MarkdownPrevi
       );
     })();
 
-    // If html or darkMode changes before rendering completes, abandon the in-flight renders
     return () => { cancelled = true; };
   }, [html, darkMode]);
 
