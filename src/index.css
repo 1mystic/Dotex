@@ -131,9 +131,12 @@
     background: hsl(var(--editor-selection));
   }
 
-  /* Variant with room for the line-number gutter on the left */
+  /* Textarea as a flex column beside the gutter */
   .editor-textarea--gutter {
-    padding-left: 3.5rem;
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    padding-left: 0.85rem;
     /* No soft-wrap: 1 logical line = 1 visual row, so line numbers stay accurate.
        Long lines scroll horizontally. */
     white-space: pre;
@@ -141,12 +144,9 @@
   }
 
   .editor-gutter {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 2.75rem;
-    padding: 2rem 0.5rem 2rem 0;
+    flex: 0 0 auto;
+    width: 2.1rem;
+    padding: 2rem 0.4rem 2rem 0;
     margin: 0;
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
@@ -160,7 +160,6 @@
     pointer-events: none;
     user-select: none;
     box-sizing: border-box;
-    z-index: 1;
   }
 
   .preview-content {

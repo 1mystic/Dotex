@@ -424,13 +424,20 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
       throw new Error("Could not load your Google Drive files. Please try again.");
     }
 
-    // Auto-seed a Getting Started file so the editor is never left blank
+    // Auto-seed a Getting Started file so the editor is never left blank. This is
+    // best-effort: if seeding fails (e.g. a brand-new folder is still propagating),
+    // we still complete the sign-in and show the connected (empty) folder rather
+    // than aborting — the user can create files, and creation retries internally.
     if (list.length === 0) {
-      const welcome = await gdriveCreateFile(null, "Getting Started.md");
-      await gdriveSaveContent(welcome.id, WELCOME_CONTENT);
-      list = [{ ...welcome, updatedAt: Date.now() }];
-      setNodes(list);
-      setActiveFileId(welcome.id);
+      try {
+        const welcome = await gdriveCreateFile(null, "Getting Started.md");
+        await gdriveSaveContent(welcome.id, WELCOME_CONTENT);
+        setNodes([{ ...welcome, updatedAt: Date.now() }]);
+        setActiveFileId(welcome.id);
+      } catch {
+        setNodes([]);
+        setActiveFileId(null);
+      }
     } else {
       setNodes(list);
       const first = list.find((n) => n.type === "file") ?? null;

@@ -13,7 +13,9 @@ import { FileNode } from "./types";
 import { dbGet, dbPut, dbDelete } from "../db";
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-const SCOPES = "https://www.googleapis.com/auth/drive.file";
+// drive.file → access only to files this app creates. email/profile → so the
+// userinfo endpoint works and we can show the signed-in account name.
+const SCOPES = "email profile https://www.googleapis.com/auth/drive.file";
 const ROOT_FOLDER_NAME = "Dotex";
 // Folder name used by earlier versions — adopted and renamed on first load.
 const LEGACY_ROOT_FOLDER_NAMES = ["Texflow Notes", "Texflow"];
@@ -32,6 +34,8 @@ interface DriveMap {
 // In-memory token cache
 let _token: string | null = null;
 let _userName: string | null = null;
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 // ── Token management ──────────────────────────────────────────────────────────
 
@@ -331,7 +335,7 @@ export async function gdriveCreateFile(
   const drivePId = parentId ? map.idToDriveId[parentId] : rootId;
   if (!drivePId) throw new Error("Parent folder not found in Drive");
 
-  const boundary = "---texflow_boundary---";
+  const boundary = "---dotex_boundary---";
   const metadata = JSON.stringify({ name, parents: [drivePId], mimeType: "text/plain" });
   const body = [
     `--${boundary}`,
@@ -345,22 +349,32 @@ export async function gdriveCreateFile(
     `--${boundary}--`,
   ].join("\r\n");
 
-  const res = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${gdriveGetToken()}`,
-        "Content-Type": `multipart/related; boundary=${boundary}`,
+  // A just-created root folder can briefly 404 as an upload parent (Drive's
+  // eventual consistency), which is what breaks the very first sign-in. Retry a
+  // few times with backoff so the initial welcome file is created reliably.
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    res = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${gdriveGetToken()}`,
+          "Content-Type": `multipart/related; boundary=${boundary}`,
+        },
+        body,
       },
-      body,
-    },
-  );
-  if (!res.ok) {
+    );
+    if (res.ok) break;
+    // Only retry on transient conditions (parent not yet visible / server errors).
+    if (res.status !== 404 && res.status < 500) break;
+    await sleep(500 * (attempt + 1));
+  }
+  if (!res || !res.ok) {
     throw new Error(
-      res.status === 401
+      res?.status === 401
         ? "Google Drive session expired — please sign in again."
-        : `Drive file creation failed (${res.status})`,
+        : `Drive file creation failed (${res?.status ?? "network error"})`,
     );
   }
   const data = await res.json();

@@ -335,8 +335,9 @@ export default function Editor() {
 
   const editorArea = (
     <div className="relative flex flex-col min-h-0 w-full h-full border-r border-border">
-      <div className="relative flex-1 min-h-0">
-        {/* Line-number gutter — scroll-synced with the textarea */}
+      <div className="flex flex-1 min-h-0">
+        {/* Line-number gutter — a flex column (not an overlay) so the textarea's
+            horizontal scrollbar never hides behind it. Scroll-synced vertically. */}
         <div ref={gutterRef} className="editor-gutter" aria-hidden="true">
           {Array.from({ length: lineCount }, (_, i) => i + 1).join("\n")}
         </div>
