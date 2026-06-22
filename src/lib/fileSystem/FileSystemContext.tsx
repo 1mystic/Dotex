@@ -412,7 +412,17 @@ export function FileSystemProvider({ children }: { children: React.ReactNode }) 
     backendRef.current = "gdrive";
     localStorage.setItem(PREF_BACKEND, "gdrive");
 
-    let list = await gdriveListAll();
+    // The very first Drive call right after a fresh consent can transiently fail
+    // (access-token propagation race). Retry a couple of times before giving up so
+    // the file tree loads on the first sign-in rather than only after a re-login.
+    let list = await gdriveListAll().catch(() => null as FileNode[] | null);
+    for (let attempt = 0; attempt < 3 && list === null; attempt++) {
+      await new Promise((r) => setTimeout(r, 500));
+      list = await gdriveListAll().catch(() => null as FileNode[] | null);
+    }
+    if (list === null) {
+      throw new Error("Could not load your Google Drive files. Please try again.");
+    }
 
     // Auto-seed a Getting Started file so the editor is never left blank
     if (list.length === 0) {

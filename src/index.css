@@ -114,7 +114,8 @@
   .editor-textarea {
     font-family: 'JetBrains Mono', monospace;
     font-size: 14px;
-    line-height: 1.7;
+    /* Fixed px line-height so the line-number gutter aligns exactly */
+    line-height: 24px;
     background: hsl(var(--editor-bg));
     color: hsl(var(--editor-fg));
     caret-color: hsl(var(--editor-cursor));
@@ -128,6 +129,38 @@
   }
   .editor-textarea::selection {
     background: hsl(var(--editor-selection));
+  }
+
+  /* Variant with room for the line-number gutter on the left */
+  .editor-textarea--gutter {
+    padding-left: 3.5rem;
+    /* No soft-wrap: 1 logical line = 1 visual row, so line numbers stay accurate.
+       Long lines scroll horizontally. */
+    white-space: pre;
+    overflow-wrap: normal;
+  }
+
+  .editor-gutter {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 2.75rem;
+    padding: 2rem 0.5rem 2rem 0;
+    margin: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 24px;
+    text-align: right;
+    white-space: pre;
+    color: hsl(var(--editor-fg) / 0.32);
+    background: hsl(var(--editor-bg));
+    border-right: 1px solid hsl(var(--editor-line));
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+    box-sizing: border-box;
+    z-index: 1;
   }
 
   .preview-content {

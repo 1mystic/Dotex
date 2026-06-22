@@ -72,6 +72,7 @@ export default function Editor() {
 
   // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const gutterRef = useRef<HTMLDivElement>(null);
   const previewScrollRef = useRef<HTMLDivElement>(null);
   const ignoreScrollRef = useRef(false);
   const historyRef = useRef<string[]>([""]);
@@ -240,8 +241,10 @@ export default function Editor() {
   };
 
   const handleEditorScroll = () => {
-    const e = textareaRef.current, p = previewScrollRef.current;
-    if (e && p) syncScroll(e, p);
+    const e = textareaRef.current, p = previewScrollRef.current, g = gutterRef.current;
+    // Keep the line-number gutter aligned with the textarea's vertical scroll.
+    if (e && g) g.scrollTop = e.scrollTop;
+    if (viewMode === "split" && e && p) syncScroll(e, p);
   };
   const handlePreviewScroll = () => {
     const e = textareaRef.current, p = previewScrollRef.current;
@@ -250,41 +253,51 @@ export default function Editor() {
 
   // ── Formatting ──────────────────────────────────────────────────────────────
 
+  // Wrap/insert around the selection. We capture the textarea's scrollTop before
+  // mutating the value and restore it afterwards: updating a controlled textarea's
+  // value resets its scroll to the top, which would otherwise jump the editor away
+  // from the edit. (These are plain functions, not memoized — a stale useCallback
+  // closure here would also read a stale activeFileId and skip auto-save.)
   const wrapSelection = (before: string, after = "") => {
     const ta = textareaRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
+    const scrollTop = ta.scrollTop;
+    const scrollLeft = ta.scrollLeft;
     const sel = ta.value.slice(start, end);
     const newVal = ta.value.slice(0, start) + before + sel + after + ta.value.slice(end);
     handleSourceChange(newVal);
+    const caret = sel
+      ? start + before.length + sel.length + after.length
+      : start + before.length;
     requestAnimationFrame(() => {
       ta.focus();
-      ta.selectionStart = ta.selectionEnd = sel
-        ? start + before.length + sel.length + after.length
-        : start + before.length;
+      ta.selectionStart = ta.selectionEnd = caret;
+      ta.scrollTop = scrollTop;
+      ta.scrollLeft = scrollLeft;
       updateCursor();
     });
   };
 
-  const handleInsert = useCallback((before: string, after = "") => {
-    wrapSelection(before, after);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const handleInsert = (before: string, after = "") => wrapSelection(before, after);
 
-  const handleSnippet = useCallback((snippet: string) => {
+  const handleSnippet = (snippet: string) => {
     const ta = textareaRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
+    const scrollTop = ta.scrollTop;
+    const scrollLeft = ta.scrollLeft;
     const newVal = ta.value.slice(0, start) + snippet + ta.value.slice(ta.selectionEnd);
     handleSourceChange(newVal);
     requestAnimationFrame(() => {
       ta.focus();
       ta.selectionStart = ta.selectionEnd = start + snippet.length;
+      ta.scrollTop = scrollTop;
+      ta.scrollLeft = scrollLeft;
       updateCursor();
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const mod = e.ctrlKey || e.metaKey;
@@ -318,20 +331,29 @@ export default function Editor() {
 
   // ── Shared editor / preview areas ───────────────────────────────────────────
 
+  const lineCount = source.length === 0 ? 1 : source.split("\n").length;
+
   const editorArea = (
     <div className="relative flex flex-col min-h-0 w-full h-full border-r border-border">
-      <textarea
-        ref={textareaRef}
-        className="editor-textarea flex-1"
-        value={source}
-        onChange={(e) => handleSourceChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        onSelect={updateCursor}
-        onClick={updateCursor}
-        onKeyUp={updateCursor}
-        onScroll={viewMode === "split" ? handleEditorScroll : undefined}
-        spellCheck={false}
-      />
+      <div className="relative flex-1 min-h-0">
+        {/* Line-number gutter — scroll-synced with the textarea */}
+        <div ref={gutterRef} className="editor-gutter" aria-hidden="true">
+          {Array.from({ length: lineCount }, (_, i) => i + 1).join("\n")}
+        </div>
+        <textarea
+          ref={textareaRef}
+          className="editor-textarea editor-textarea--gutter"
+          value={source}
+          onChange={(e) => handleSourceChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onSelect={updateCursor}
+          onClick={updateCursor}
+          onKeyUp={updateCursor}
+          onScroll={handleEditorScroll}
+          spellCheck={false}
+          wrap="off"
+        />
+      </div>
       {findOpen && (
         <FindReplace
           source={source}
