@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronUp, ChevronDown, ChevronsUpDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { MatchInfo } from "./HighlightOverlay";
 
 interface Props {
   source: string;
@@ -11,6 +12,7 @@ interface Props {
   onToggleReplace: () => void;
   onChange: (newSource: string) => void;
   onClose: () => void;
+  onMatchInfo: (info: MatchInfo | null) => void;
 }
 
 function findMatches(source: string, term: string, caseSensitive: boolean): number[] {
@@ -42,6 +44,7 @@ export default function FindReplace({
   onToggleReplace,
   onChange,
   onClose,
+  onMatchInfo,
 }: Props) {
   const [findText, setFindText] = useState("");
   const [replaceText, setReplaceText] = useState("");
@@ -49,7 +52,10 @@ export default function FindReplace({
   const [currentIndex, setCurrentIndex] = useState(0);
   const findInputRef = useRef<HTMLInputElement>(null);
 
-  const matches = findMatches(source, findText, caseSensitive);
+  const matches = useMemo(
+    () => findMatches(source, findText, caseSensitive),
+    [source, findText, caseSensitive],
+  );
   const matchCount = matches.length;
   // Keep index in bounds as matches list changes
   const safeIndex = matchCount > 0 ? Math.min(currentIndex, matchCount - 1) : 0;
@@ -65,34 +71,33 @@ export default function FindReplace({
     setCurrentIndex(0);
   }, [findText, caseSensitive]);
 
-  // Scroll textarea to current match whenever it changes
+  // Propagate match info to parent so the highlight overlay can render
+  useEffect(() => {
+    onMatchInfo(findText && matchCount > 0 ? { matches, currentIndex: safeIndex, term: findText } : null);
+    return () => onMatchInfo(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matches, safeIndex, findText]);
+
+  // Scroll textarea to current match — only when user explicitly navigated
+  // (find input focused), never while the user is editing in the textarea.
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta || matchCount === 0 || !findText) return;
+    if (document.activeElement === ta) return;
     const start = matches[safeIndex];
     scrollTextareaToOffset(ta, source, start);
-    // Set selection range so cursor lands there when textarea gets focus
-    ta.setSelectionRange(start, start + findText.length);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [safeIndex, matchCount, findText]);
+  }, [safeIndex, findText]);
 
   const navigate = useCallback(
     (dir: 1 | -1) => {
       if (matchCount === 0) return;
       const next = ((safeIndex + dir) % matchCount + matchCount) % matchCount;
       setCurrentIndex(next);
-      // Focus textarea so the selection highlight is visible, then return to find input
-      const ta = textareaRef.current;
-      if (ta) {
-        const start = matches[next];
-        scrollTextareaToOffset(ta, source, start);
-        ta.setSelectionRange(start, start + findText.length);
-        ta.focus();
-      }
-      // Return focus to find input after a frame so the selection stays set
-      requestAnimationFrame(() => findInputRef.current?.focus());
+      // Scroll is handled by the safeIndex effect; find input keeps focus so
+      // keyboard navigation continues to work without a focus-steal cycle.
     },
-    [matchCount, safeIndex, matches, source, findText, textareaRef],
+    [matchCount, safeIndex],
   );
 
   const handleReplace = () => {

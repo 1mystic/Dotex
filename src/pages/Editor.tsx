@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import HighlightOverlay, { type MatchInfo } from "@/components/editor/HighlightOverlay";
 import { type ImperativePanelHandle } from "react-resizable-panels";
 import DocumentHeader from "@/components/editor/DocumentHeader";
 import EditorToolbar from "@/components/editor/EditorToolbar";
@@ -69,6 +70,7 @@ export default function Editor() {
   const [pendingNewParentId, setPendingNewParentId] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [showReplace, setShowReplace] = useState(false);
+  const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
 
   // Refs
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -83,6 +85,7 @@ export default function Editor() {
   // Imperative handle for the sidebar panel — drives collapse/expand without
   // unmounting the panel (which would reverse the resize direction).
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const highlightOverlayRef = useRef<HTMLDivElement>(null);
 
   // ── Dark mode ───────────────────────────────────────────────────────────────
 
@@ -240,10 +243,21 @@ export default function Editor() {
     requestAnimationFrame(() => { ignoreScrollRef.current = false; });
   };
 
+  const handleMatchInfo = useCallback((info: MatchInfo | null) => setMatchInfo(info), []);
+
+  // Sync overlay scroll position whenever it mounts or match info arrives —
+  // the overlay div always starts at scrollTop=0 which won't match a scrolled textarea.
+  useEffect(() => {
+    if (matchInfo && highlightOverlayRef.current && textareaRef.current) {
+      highlightOverlayRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  }, [matchInfo]);
+
   const handleEditorScroll = () => {
     const e = textareaRef.current, p = previewScrollRef.current, g = gutterRef.current;
     // Keep the line-number gutter aligned with the textarea's vertical scroll.
     if (e && g) g.scrollTop = e.scrollTop;
+    if (e && highlightOverlayRef.current) highlightOverlayRef.current.scrollTop = e.scrollTop;
     if (viewMode === "split" && e && p) syncScroll(e, p);
   };
   const handlePreviewScroll = () => {
@@ -341,19 +355,29 @@ export default function Editor() {
         <div ref={gutterRef} className="editor-gutter" aria-hidden="true">
           {Array.from({ length: lineCount }, (_, i) => i + 1).join("\n")}
         </div>
-        <textarea
-          ref={textareaRef}
-          className="editor-textarea editor-textarea--gutter"
-          value={source}
-          onChange={(e) => handleSourceChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onSelect={updateCursor}
-          onClick={updateCursor}
-          onKeyUp={updateCursor}
-          onScroll={handleEditorScroll}
-          spellCheck={false}
-          wrap="off"
-        />
+        {/* Wrapper so the highlight overlay can be positioned behind the textarea */}
+        <div className="editor-textarea-wrapper">
+          {findOpen && matchInfo && (
+            <HighlightOverlay
+              ref={highlightOverlayRef}
+              source={source}
+              matchInfo={matchInfo}
+            />
+          )}
+          <textarea
+            ref={textareaRef}
+            className="editor-textarea editor-textarea--gutter"
+            value={source}
+            onChange={(e) => handleSourceChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onSelect={updateCursor}
+            onClick={updateCursor}
+            onKeyUp={updateCursor}
+            onScroll={handleEditorScroll}
+            spellCheck={false}
+            style={findOpen && matchInfo ? { background: "transparent", position: "relative", zIndex: 1 } : undefined}
+          />
+        </div>
       </div>
       {findOpen && (
         <FindReplace
@@ -362,8 +386,10 @@ export default function Editor() {
           showReplace={showReplace}
           onToggleReplace={() => setShowReplace((v) => !v)}
           onChange={handleSourceChange}
+          onMatchInfo={handleMatchInfo}
           onClose={() => {
             setFindOpen(false);
+            setMatchInfo(null);
             textareaRef.current?.focus();
           }}
         />

@@ -131,16 +131,62 @@
     background: hsl(var(--editor-selection));
   }
 
-  /* Textarea as a flex column beside the gutter */
-  .editor-textarea--gutter {
+  /* Wrapper that positions the highlight overlay behind the textarea */
+  .editor-textarea-wrapper {
+    position: relative;
     flex: 1 1 0;
     min-width: 0;
-    width: auto;
+    height: 100%;
+    background: hsl(var(--editor-bg));
+  }
+
+  /* Highlight overlay — mirrors textarea geometry exactly, sits behind it */
+  .editor-highlight-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    line-height: 24px;
+    /* Match textarea padding (2rem all sides; left overridden by --gutter class) */
+    padding: 2rem 2rem 2rem 0.85rem;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    tab-size: 2;
+    color: transparent;
+    overflow: auto;
+    scrollbar-width: none;
+    z-index: 0;
+  }
+  .editor-highlight-overlay::-webkit-scrollbar { display: none; }
+
+  .editor-highlight-overlay .hl-match {
+    background: rgba(250, 204, 21, 0.28);
+    border-radius: 2px;
+    color: transparent;
+  }
+  .editor-highlight-overlay .hl-current {
+    background: rgba(251, 146, 60, 0.55);
+    border-radius: 2px;
+    outline: 1px solid rgba(251, 146, 60, 0.85);
+    color: transparent;
+  }
+  .dark .editor-highlight-overlay .hl-match {
+    background: rgba(250, 204, 21, 0.22);
+  }
+  .dark .editor-highlight-overlay .hl-current {
+    background: rgba(251, 146, 60, 0.45);
+    outline-color: rgba(251, 146, 60, 0.75);
+  }
+
+  /* Textarea fills its wrapper (no longer a direct flex child) */
+  .editor-textarea--gutter {
+    min-width: 0;
+    width: 100%;
+    height: 100%;
     padding-left: 0.85rem;
-    /* No soft-wrap: 1 logical line = 1 visual row, so line numbers stay accurate.
-       Long lines scroll horizontally. */
-    white-space: pre;
-    overflow-wrap: normal;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
   }
 
   .editor-gutter {
